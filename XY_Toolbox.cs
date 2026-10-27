@@ -30,6 +30,15 @@ namespace XY_Deepening_Toolbox
             {
                 // 初始化输入法智能自动切换模块 (命令全自动纯英文，文字全自动中文，完美复刻老李作品)
                 Commands.ImeAutoSwitchManager.Initialize();
+                try
+                {
+                    System.Threading.Tasks.Task.Factory.StartNew(() =>
+                    {
+                        System.Threading.Thread.Sleep(3500);
+                        XY_Toolbox.UpdateService.CheckForUpdates(true);
+                    });
+                }
+                catch { }
 
                 Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                 if (doc != null)
@@ -4031,6 +4040,18 @@ namespace XY_Deepening_Toolbox
             lblTitle.Size = new Size(180, 18);
             lblTitle.UseCompatibleTextRendering = true;
             pnlHeader.Controls.Add(lblTitle);
+
+            Label lblUpdate = new Label();
+            lblUpdate.Text = "检查更新";
+            lblUpdate.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
+            lblUpdate.ForeColor = Color.FromArgb(100, 180, 240);
+            lblUpdate.Location = new Point(140, 7);
+            lblUpdate.Size = new Size(70, 18);
+            lblUpdate.Cursor = Cursors.Hand;
+            lblUpdate.UseCompatibleTextRendering = true;
+            toolTipHelp.SetToolTip(lblUpdate, "点击在线检测新版本 (快捷键: XGX)");
+            lblUpdate.Click += (s, e) => XY_Toolbox.UpdateService.CheckForUpdates(false);
+            pnlHeader.Controls.Add(lblUpdate);
 
             this.Controls.Add(pnlHeader);
 

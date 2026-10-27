@@ -13,3 +13,12 @@ XY_Toolbox_v*.dll
 .idea/
 Thumbs.db
 Desktop.ini
+
+# 发布成果物与临时包
+发布成果物/
+_release_temp/
+*.zip
+
+# 在线更新暂存与脚本
+pending_update/
+apply_update.bat
