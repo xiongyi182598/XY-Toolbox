@@ -14,6 +14,7 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.GraphicsInterface;
 using Font = System.Drawing.Font;
 using System.Data;
+using XY_Toolbox;
 
 [assembly: ExtensionApplication(typeof(XY_Deepening_Toolbox.PluginApp))]
 [assembly: CommandClass(typeof(XY_Deepening_Toolbox.Commands))]
@@ -83,6 +84,22 @@ namespace XY_Deepening_Toolbox
 
     public class Commands
     {
+        [CommandMethod("SK")]
+        [CommandMethod("SKYS")]
+        [CommandMethod("SKTC")]
+        [CommandMethod("XY_VPOVERRIDE")]
+        public static void CmdViewportLayerOverride()
+        {
+            ViewportLayerForm.ShowFloatingPalette();
+        }
+
+        [CommandMethod("XGX")]
+        [CommandMethod("UPDATE")]
+        [CommandMethod("XY_UPDATE")]
+        public static void CmdCheckUpdate()
+        {
+            UpdateService.CheckForUpdates(false);
+        }
         public static string FindToolboxFile(string fileName)
         {
             try
@@ -4096,6 +4113,9 @@ namespace XY_Deepening_Toolbox
             AddItemRowToSection(sec1, "🔬", "图层对比", "LYCOMPARE", 
                 "图层对比 (LYCOMPARE)\n加载引用图纸，自动比对图层/线型/颜色，智能评分并一键合并", 
                 () => Commands.ShowLayerCompareDialog());
+            AddItemRowToSection(sec1, "👁️", "视口图层", "SK", 
+                "视口图层 (SK / SKYS)\n悬浮弹窗穿透拾取图层，快速修改当前视口的颜色与线型覆盖", 
+                () => ViewportLayerForm.ShowFloatingPalette());
             RegisterSection(sec1);
 
             // 分类 2: 图块工具 (默认展开，方便直观查看)
@@ -4128,7 +4148,7 @@ namespace XY_Deepening_Toolbox
             RegisterSection(sec3);
 
             // 分类 4: 系统设置 (默认展开)
-            CategorySection sec4 = CreateCategorySection("系统设置", 3, true);
+            CategorySection sec4 = CreateCategorySection("系统设置", 4, true);
             AddItemRowToSection(sec4, "⌨️", "输入切换", "XSR", 
                 "输入切换 (XSR)\n智能输入法自动切换：画图命令保持纯英文盲打，文字编辑自动切中文 (别名: XSRF, IME)", 
                 () => SendCadCommand("XSR "));
@@ -4138,6 +4158,9 @@ namespace XY_Deepening_Toolbox
             AddItemRowToSection(sec4, "🚀", "程序重载", "XCZ", 
                 "程序重载 (XCZ)\n无需重启 AutoCAD，一秒级热重载最新核心代码与所有快捷键", 
                 () => SendCadCommand("XCZ "));
+            AddItemRowToSection(sec4, "🔄", "在线更新", "XGX", 
+                "在线更新 (XGX / UPDATE)\n智能检测云端最新版本并一键极速在线升级", 
+                () => UpdateService.CheckForUpdates(false));
             RegisterSection(sec4);
 
             RelayoutSections();
