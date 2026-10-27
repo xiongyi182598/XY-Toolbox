@@ -4074,7 +4074,7 @@ namespace XY_Deepening_Toolbox
             _sections.Clear();
 
             // 分类 1: 图层工具 (默认展开，单行高密度排布)
-            CategorySection sec1 = CreateCategorySection("图层工具", 7, true);
+            CategorySection sec1 = CreateCategorySection("图层工具", 8, true);
             AddItemRowToSection(sec1, "🎨", "图层合并", "XHB", 
                 "图层合并 (XHB)\n弹出独立可视化面板：前缀规范/层名修改/颜色线型/属性继承", 
                 () => Commands.ShowLayerMergeDialog());
