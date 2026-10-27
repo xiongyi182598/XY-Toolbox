@@ -47,22 +47,34 @@ namespace XY_Toolbox
 
         public static void ShowFloatingPalette()
         {
-            if (_instance != null && !_instance.IsDisposed)
+            try
             {
-                _instance.WindowState = FormWindowState.Normal;
-                _instance.BringToFront();
-                _instance.CheckAndRefreshViewport(false);
-                return;
-            }
+                if (_instance != null && !_instance.IsDisposed)
+                {
+                    _instance.WindowState = FormWindowState.Normal;
+                    _instance.BringToFront();
+                    _instance.CheckAndRefreshViewport(false);
+                    return;
+                }
 
-            _instance = new ViewportLayerForm();
-            _instance.Show();
+                _instance = new ViewportLayerForm();
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(null, _instance, false);
+            }
+            catch (System.Exception ex)
+            {
+                try
+                {
+                    Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+                    if (doc != null) doc.Editor.WriteMessage("\n[XY工具箱] 打开视口面板失败: " + ex.Message);
+                }
+                catch { }
+            }
         }
 
         public ViewportLayerForm()
         {
             InitializeComponent();
-            CheckAndRefreshViewport(true);
+            CheckAndRefreshViewport(false);
         }
 
         private void InitializeComponent()
@@ -277,26 +289,26 @@ namespace XY_Toolbox
                 short tilemode = (short)Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("TILEMODE");
                 if (tilemode == 1)
                 {
-                    if (showAlert)
-                    {
-                        MessageBox.Show(this, "当前处于【模型空间】。\n本功能专用于【布局视口】中的局部图层覆盖，请切换到布局视口中使用！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    lblHeaderTitle.Text = "👁️ 视口图层覆盖 [提示: 请进入布局视口]";
+                    lblHeaderTitle.Text = "👁️ 视口图层覆盖 [提示: 请切换到布局视口]";
                     lblHeaderTitle.ForeColor = System.Drawing.Color.FromArgb(255, 120, 120);
                     _currentVpId = ObjectId.Null;
+                    if (showAlert)
+                    {
+                        MessageBox.Show(this, "当前处于【模型空间】。\n本功能专用于【布局视口】中的局部图层覆盖，请切换到布局并双击进入视口后使用！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                     return false;
                 }
 
                 short cvport = (short)Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("CVPORT");
                 if (cvport <= 1)
                 {
+                    lblHeaderTitle.Text = "👁️ 视口图层覆盖 [提示: 请双击激活视口]";
+                    lblHeaderTitle.ForeColor = System.Drawing.Color.FromArgb(255, 160, 50);
+                    _currentVpId = ObjectId.Null;
                     if (showAlert)
                     {
                         MessageBox.Show(this, "当前处于布局图纸空间，尚未激活视口！\n请【双击进入视口】激活它，再进行视口样式修改。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
-                    lblHeaderTitle.Text = "👁️ 视口图层覆盖 [提示: 请双击激活视口]";
-                    lblHeaderTitle.ForeColor = System.Drawing.Color.FromArgb(255, 160, 50);
-                    _currentVpId = ObjectId.Null;
                     return false;
                 }
 

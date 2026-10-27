@@ -103,4 +103,18 @@
   (princ)
 )
 
+
+;; 3.2 视口图层样式覆盖 (SK / SKYS)
+(defun c:SK () (vl-cmdf "_.SK"))
+(defun c:sk () (c:SK))
+(defun c:SKYS () (vl-cmdf "_.SKYS"))
+(defun c:skys () (c:SKYS))
+(defun c:SKTC () (vl-cmdf "_.SKTC"))
+(defun c:sktc () (c:SKTC))
+
+;; 3.3 商业级在线检测更新 (XGX / UPDATE)
+(defun c:XGX () (vl-cmdf "_.XGX"))
+(defun c:xgx () (c:XGX))
+(defun c:UPDATE () (c:XGX))
+(defun c:update () (c:XGX))
 (princ)
