@@ -1076,9 +1076,11 @@ namespace XY_Deepening_Toolbox
                             double det = cs.Xaxis.CrossProduct(cs.Yaxis).DotProduct(cs.Zaxis);
                             bool isBlockMirrored = (blkRef.ScaleFactors.X * blkRef.ScaleFactors.Y < -1e-6) || (det < -1e-6);
 
-                            BlockTableRecord btr = tr.GetObject(blkRef.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+                            // 优先获取动态块真正的母块定义 (如果是动态块，其真正的属性定义在 DynamicBlockTableRecord 中)
+                            ObjectId btrId = blkRef.IsDynamicBlock ? blkRef.DynamicBlockTableRecord : blkRef.BlockTableRecord;
+                            BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
 
-                            // 1. 处理属性文字：直接精准恢复至镜像前的设计基准位置与正向姿态
+                            // 1. 处理属性文字：支持任意多次镜像后的动态翻正与设计位置还原
                             if (blkRef.AttributeCollection != null && blkRef.AttributeCollection.Count > 0)
                             {
                                 foreach (ObjectId attId in blkRef.AttributeCollection)
@@ -1086,33 +1088,22 @@ namespace XY_Deepening_Toolbox
                                     AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
                                     if (attRef != null)
                                     {
-                                        bool isVisuallyMirrored = isBlockMirrored ^ attRef.IsMirroredInX ^ attRef.IsMirroredInY;
-                                        if (isVisuallyMirrored || isBlockMirrored)
-                                        {
-                                            bool ok = RestoreAttributeTextToPreMirror(blkRef, attRef, btr, tr, db);
-                                            if (ok) attrFixed++;
-                                        }
-                                        else
-                                        {
-                                            normalSkipped++;
-                                        }
+                                        bool ok = RestoreAttributeTextToPreMirror(blkRef, attRef, btr, tr, db);
+                                        if (ok) attrFixed++;
                                     }
                                 }
                             }
 
-                            // 2. 如果外部被镜像，检查块定义内部普通文字
-                            if (isBlockMirrored)
+                            // 2. 检查普通块定义内部文字 (支持非属性块的镜像反字)
+                            bool btrFixed = FixBlockDefinitionTextInternal(blkRef, tr, db, bt);
+                            if (btrFixed)
                             {
-                                bool btrFixed = FixBlockDefinitionTextInternal(blkRef, tr, db, bt);
-                                if (btrFixed)
-                                {
-                                    blockDefFixed++;
-                                }
+                                blockDefFixed++;
                             }
                         }
                         else
                         {
-                            // 3. 散放普通文字：原地消除镜像，不调用二次平移避免偏移
+                            // 3. 散放普通文字：原地消除镜像
                             DBText txt = obj as DBText;
                             if (txt != null)
                             {
@@ -1140,10 +1131,9 @@ namespace XY_Deepening_Toolbox
                 "\n=======================================================\n" +
                 "[XY工具箱] 翻正处理完毕 (FZW)！\n" +
                 "  • 扫描图元: {0} 个\n" +
-                "  • 成功恢复镜像前位置: {1} 处 (属性文字: {2}, 块内普通文字: {3}, 独立文字: {4})\n" +
-                "  • 正常跳过: {5} 处\n" +
+                "  • 成功翻正/复位: {1} 处 (属性文字: {2}, 块内普通文字: {3}, 独立文字: {4})\n" +
                 "=======================================================\n",
-                totalScanned, totalFixed, attrFixed, blockDefFixed, plainFixed, normalSkipped));
+                totalScanned, totalFixed, attrFixed, blockDefFixed, plainFixed));
         }
 
         private static bool RestoreAttributeTextToPreMirror(BlockReference blkRef, AttributeReference attRef, BlockTableRecord btr, Transaction tr, Database db)
@@ -1165,24 +1155,38 @@ namespace XY_Deepening_Toolbox
                 }
             }
 
+            Matrix3d tf = blkRef.BlockTransform;
+            CoordinateSystem3d cs = tf.CoordinateSystem3d;
+            double det = cs.Xaxis.CrossProduct(cs.Yaxis).DotProduct(cs.Zaxis);
+            bool isBlockMirrored = (blkRef.ScaleFactors.X * blkRef.ScaleFactors.Y < -1e-6) || (det < -1e-6);
+
             attRef.UpgradeOpen();
 
             if (attDef != null)
             {
-                // 计算该图块在没有被镜像时的正向变换矩阵 M_unmirrored
+                // 计算当前图块正向基准方向向量与绝对缩放
                 double scaleX = Math.Abs(blkRef.ScaleFactors.X);
                 if (scaleX < 1e-6) scaleX = 1.0;
+                double scaleY = Math.Abs(blkRef.ScaleFactors.Y);
+                if (scaleY < 1e-6) scaleY = 1.0;
 
-                Matrix3d unmirroredTransform = Matrix3d.Displacement(blkRef.Position - Point3d.Origin)
-                                             * Matrix3d.Rotation(blkRef.Rotation, blkRef.Normal, Point3d.Origin)
-                                             * Matrix3d.Scaling(scaleX, Point3d.Origin);
+                double rot = blkRef.Rotation;
+                Vector3d ux = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
+                Vector3d uy = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
 
-                // 完美还原文字在镜像前的绝对世界坐标
-                Point3d targetPos = attDef.Position.TransformBy(unmirroredTransform);
-                Point3d targetAlign = attDef.AlignmentPoint.TransformBy(unmirroredTransform);
-                double targetRotation = blkRef.Rotation + attDef.Rotation;
+                // 根据原始母块定义中 attDef 的相对设计坐标，计算当前图块标准理想位置
+                Vector3d relPos = attDef.Position - btr.Origin;
+                Point3d targetPos = blkRef.Position + (relPos.X * scaleX * ux) + (relPos.Y * scaleY * uy);
 
-                attRef.IsMirroredInX = false;
+                Vector3d relAlign = attDef.AlignmentPoint - btr.Origin;
+                Point3d targetAlign = blkRef.Position + (relAlign.X * scaleX * ux) + (relAlign.Y * scaleY * uy);
+
+                double targetRotation = rot + attDef.Rotation;
+
+                // 核心手性平衡 (支持无限次再次镜像)：
+                // 若图块当前为奇数次镜像 (det < 0)，文字自身必须设为 IsMirroredInX = true (负负得正，呈现正字)；
+                // 若图块当前为偶数次镜像 (det > 0)，文字自身设为 IsMirroredInX = false (正正得正，呈现正字)！
+                attRef.IsMirroredInX = isBlockMirrored;
                 attRef.IsMirroredInY = false;
                 attRef.Position = targetPos;
                 if (attRef.Justify != AttachmentPoint.BaseLeft)
@@ -1195,8 +1199,8 @@ namespace XY_Deepening_Toolbox
             }
             else
             {
-                // 无对应 ATTDEF 模板时，原地安全翻转，不进行额外的二次平移
-                attRef.IsMirroredInX = !attRef.IsMirroredInX;
+                // 无对应 ATTDEF 模板时，根据图块手性做翻转
+                attRef.IsMirroredInX = isBlockMirrored ? !attRef.IsMirroredInX : false;
                 attRef.AdjustAlignment(db);
                 return true;
             }
