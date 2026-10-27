@@ -1,0 +1,15 @@
+# 临时与备份文件
+*.tmp
+*.bak
+*.log
+*.swp
+*.pdb
+
+# 历史热重载递增版本（保留最终正式的 XY_Toolbox.dll）
+XY_Toolbox_v*.dll
+
+# IDE 与操作系统临时文件
+.vs/
+.idea/
+Thumbs.db
+Desktop.ini
