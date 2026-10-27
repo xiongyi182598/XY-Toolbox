@@ -47,7 +47,8 @@
   (setq dir (xy:get-toolbox-dir))
   (if (and dir (/= dir ""))
     (progn
-      (setq dll-path (strcat dir "/XY_Toolbox_v59.dll"))
+      (setq dll-path (strcat dir "/XY_Toolbox_v60.dll"))
+      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v59.dll")))
       (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v58.dll")))
       (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v57.dll")))
       (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox.dll")))

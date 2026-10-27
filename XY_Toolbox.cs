@@ -1076,7 +1076,9 @@ namespace XY_Deepening_Toolbox
                             double det = cs.Xaxis.CrossProduct(cs.Yaxis).DotProduct(cs.Zaxis);
                             bool isBlockMirrored = (blkRef.ScaleFactors.X * blkRef.ScaleFactors.Y < -1e-6) || (det < -1e-6);
 
-                            // 1. 处理属性文字
+                            BlockTableRecord btr = tr.GetObject(blkRef.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+
+                            // 1. 处理属性文字：直接精准恢复至镜像前的设计基准位置与正向姿态
                             if (blkRef.AttributeCollection != null && blkRef.AttributeCollection.Count > 0)
                             {
                                 foreach (ObjectId attId in blkRef.AttributeCollection)
@@ -1085,21 +1087,10 @@ namespace XY_Deepening_Toolbox
                                     if (attRef != null)
                                     {
                                         bool isVisuallyMirrored = isBlockMirrored ^ attRef.IsMirroredInX ^ attRef.IsMirroredInY;
-                                        if (isVisuallyMirrored)
+                                        if (isVisuallyMirrored || isBlockMirrored)
                                         {
-                                            Point3d centerBefore = GetEntityCenterSafe(attRef);
-                                            attRef.UpgradeOpen();
-                                            attRef.IsMirroredInX = !attRef.IsMirroredInX;
-                                            attRef.AdjustAlignment(db);
-
-                                            Point3d centerAfter = GetEntityCenterSafe(attRef);
-                                            Vector3d offset = centerBefore - centerAfter;
-                                            if (offset.Length > 1e-6)
-                                            {
-                                                attRef.TransformBy(Matrix3d.Displacement(offset));
-                                                attRef.AdjustAlignment(db);
-                                            }
-                                            attrFixed++;
+                                            bool ok = RestoreAttributeTextToPreMirror(blkRef, attRef, btr, tr, db);
+                                            if (ok) attrFixed++;
                                         }
                                         else
                                         {
@@ -1121,23 +1112,15 @@ namespace XY_Deepening_Toolbox
                         }
                         else
                         {
-                            // 3. 散放普通文字
+                            // 3. 散放普通文字：原地消除镜像，不调用二次平移避免偏移
                             DBText txt = obj as DBText;
                             if (txt != null)
                             {
                                 if (txt.IsMirroredInX ^ txt.IsMirroredInY)
                                 {
-                                    Point3d cBefore = GetEntityCenterSafe(txt);
                                     txt.UpgradeOpen();
                                     txt.IsMirroredInX = !txt.IsMirroredInX;
                                     txt.AdjustAlignment(db);
-                                    Point3d cAfter = GetEntityCenterSafe(txt);
-                                    Vector3d off = cBefore - cAfter;
-                                    if (off.Length > 1e-6)
-                                    {
-                                        txt.TransformBy(Matrix3d.Displacement(off));
-                                        txt.AdjustAlignment(db);
-                                    }
                                     plainFixed++;
                                 }
                                 else
@@ -1157,10 +1140,66 @@ namespace XY_Deepening_Toolbox
                 "\n=======================================================\n" +
                 "[XY工具箱] 翻正处理完毕 (FZW)！\n" +
                 "  • 扫描图元: {0} 个\n" +
-                "  • 成功翻正: {1} 处 (属性文字: {2}, 块内普通文字: {3}, 独立文字: {4})\n" +
+                "  • 成功恢复镜像前位置: {1} 处 (属性文字: {2}, 块内普通文字: {3}, 独立文字: {4})\n" +
                 "  • 正常跳过: {5} 处\n" +
                 "=======================================================\n",
                 totalScanned, totalFixed, attrFixed, blockDefFixed, plainFixed, normalSkipped));
+        }
+
+        private static bool RestoreAttributeTextToPreMirror(BlockReference blkRef, AttributeReference attRef, BlockTableRecord btr, Transaction tr, Database db)
+        {
+            AttributeDefinition attDef = null;
+            if (btr != null)
+            {
+                foreach (ObjectId id in btr)
+                {
+                    if (id.ObjectClass.DxfName.Equals("ATTDEF", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AttributeDefinition def = tr.GetObject(id, OpenMode.ForRead) as AttributeDefinition;
+                        if (def != null && string.Equals(def.Tag, attRef.Tag, StringComparison.OrdinalIgnoreCase))
+                        {
+                            attDef = def;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            attRef.UpgradeOpen();
+
+            if (attDef != null)
+            {
+                // 计算该图块在没有被镜像时的正向变换矩阵 M_unmirrored
+                double scaleX = Math.Abs(blkRef.ScaleFactors.X);
+                if (scaleX < 1e-6) scaleX = 1.0;
+
+                Matrix3d unmirroredTransform = Matrix3d.Displacement(blkRef.Position - Point3d.Origin)
+                                             * Matrix3d.Rotation(blkRef.Rotation, blkRef.Normal, Point3d.Origin)
+                                             * Matrix3d.Scaling(scaleX, Point3d.Origin);
+
+                // 完美还原文字在镜像前的绝对世界坐标
+                Point3d targetPos = attDef.Position.TransformBy(unmirroredTransform);
+                Point3d targetAlign = attDef.AlignmentPoint.TransformBy(unmirroredTransform);
+                double targetRotation = blkRef.Rotation + attDef.Rotation;
+
+                attRef.IsMirroredInX = false;
+                attRef.IsMirroredInY = false;
+                attRef.Position = targetPos;
+                if (attRef.Justify != AttachmentPoint.BaseLeft)
+                {
+                    attRef.AlignmentPoint = targetAlign;
+                }
+                attRef.Rotation = targetRotation;
+                attRef.AdjustAlignment(db);
+                return true;
+            }
+            else
+            {
+                // 无对应 ATTDEF 模板时，原地安全翻转，不进行额外的二次平移
+                attRef.IsMirroredInX = !attRef.IsMirroredInX;
+                attRef.AdjustAlignment(db);
+                return true;
+            }
         }
 
         private static bool FixBlockDefinitionTextInternal(BlockReference blkRef, Transaction tr, Database db, BlockTable bt)
@@ -1176,7 +1215,6 @@ namespace XY_Deepening_Toolbox
                     DBText t = tr.GetObject(id, OpenMode.ForRead) as DBText;
                     if (t != null)
                     {
-                        // 外部块被镜像，内部文字如果没设镜像则视觉为反
                         bool isVisuallyMirrored = true ^ t.IsMirroredInX ^ t.IsMirroredInY;
                         if (isVisuallyMirrored)
                         {
@@ -1191,30 +1229,27 @@ namespace XY_Deepening_Toolbox
             ObjectIdCollection refIds = btr.GetBlockReferenceIds(true, false);
             if (refIds.Count <= 1)
             {
-                // 仅此一个引用，直接修改原定义
                 btr.UpgradeOpen();
                 foreach (ObjectId tid in textIds)
                 {
                     DBText t = tr.GetObject(tid, OpenMode.ForWrite) as DBText;
                     if (t != null)
                     {
-                        Point3d cBefore = GetEntityCenterSafe(t);
-                        t.IsMirroredInX = !t.IsMirroredInX;
-                        t.AdjustAlignment(db);
-                        Point3d cAfter = GetEntityCenterSafe(t);
-                        Vector3d off = cBefore - cAfter;
-                        if (off.Length > 1e-6)
+                        Point3d p = t.Position;
+                        t.Position = new Point3d(-p.X, p.Y, p.Z);
+                        if (t.Justify != AttachmentPoint.BaseLeft)
                         {
-                            t.TransformBy(Matrix3d.Displacement(off));
-                            t.AdjustAlignment(db);
+                            Point3d al = t.AlignmentPoint;
+                            t.AlignmentPoint = new Point3d(-al.X, al.Y, al.Z);
                         }
+                        t.IsMirroredInX = true;
+                        t.AdjustAlignment(db);
                     }
                 }
                 return true;
             }
             else
             {
-                // 存在其他引用，克隆独立分支块定义
                 string newBlockName = GetUniqueBlockName(bt, btr.Name + "_FZ");
                 BlockTableRecord newBtr = new BlockTableRecord();
                 newBtr.Name = newBlockName;
@@ -1233,16 +1268,15 @@ namespace XY_Deepening_Toolbox
                     DBText txt = clonedEnt as DBText;
                     if (txt != null && textIds.Contains(id))
                     {
-                        Point3d cBefore = GetEntityCenterSafe(txt);
-                        txt.IsMirroredInX = !txt.IsMirroredInX;
-                        txt.AdjustAlignment(db);
-                        Point3d cAfter = GetEntityCenterSafe(txt);
-                        Vector3d off = cBefore - cAfter;
-                        if (off.Length > 1e-6)
+                        Point3d p = txt.Position;
+                        txt.Position = new Point3d(-p.X, p.Y, p.Z);
+                        if (txt.Justify != AttachmentPoint.BaseLeft)
                         {
-                            txt.TransformBy(Matrix3d.Displacement(off));
-                            txt.AdjustAlignment(db);
+                            Point3d al = txt.AlignmentPoint;
+                            txt.AlignmentPoint = new Point3d(-al.X, al.Y, al.Z);
                         }
+                        txt.IsMirroredInX = true;
+                        txt.AdjustAlignment(db);
                     }
 
                     newBtr.AppendEntity(clonedEnt);
