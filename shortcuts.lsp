@@ -1,11 +1,11 @@
 ;; ========================================================
-;; XY工具箱 - 快捷键直通映射与热重载 (shortcuts.lsp)
-;; 编码: ANSI / GBK (完美适配各版本 AutoCAD)
+;; XY工具箱 - 快捷键直通映射表 (shortcuts.lsp)
+;; 编码: ANSI / GBK (完美兼容各版本 AutoCAD)
 ;; ========================================================
 
 (vl-load-com)
 
-;; 1. 确保核心 autoload.lsp 正确就绪
+;; 1. 确保 autoload.lsp 先行加载就绪
 (if (null execute_layer_merge)
   (progn
     (if (findfile "autoload.lsp")
@@ -14,54 +14,86 @@
   )
 )
 
-;; 2. 快捷键强绑定映射 (大小写双向直通)
-;; 2. 快捷键映射 (优先遵循 X 前缀规范，严格保护海龙/天正既有指令)
+;; 2. 图层合并指令映射 (统一调用 C# 现代面板，彻底杜绝旧版 DCL)
+(defun c:XHB () (c:fast_merge))
+(defun c:xhb () (c:fast_merge))
+(defun c:HB2 () (c:fast_merge))
+(defun c:hb2 () (c:fast_merge))
+
+;; 3. 极速点选合并指令 (免弹窗)
 (defun c:XJH () (c:fast_merge_quick))
 (defun c:xjh () (c:fast_merge_quick))
 (defun c:HB1 () (c:fast_merge_quick))
 (defun c:hb1 () (c:fast_merge_quick))
 
-;; 保护海龙核心命令: LM (立面框架 zhl_lm) 与 HC (转成窗户 zhl_hc)
+;; 智能防冲突快捷键: LM (若未占用) 与 HC (若未占用)
 (if (null (read "c:LM")) (defun c:LM () (c:fast_merge_quick)))
 (if (null (read "c:lm")) (defun c:lm () (c:fast_merge_quick)))
 (if (null (read "c:HC")) (defun c:HC () (c:fast_merge_quick)))
 (if (null (read "c:hc")) (defun c:hc () (c:fast_merge_quick)))
 
-(defun c:HB2 () (c:fast_merge))
-(defun c:hb2 () (c:fast_merge))
+;; 4. 原位编块免进编辑穿透拉伸与移动 (XKB / XLS / XSTRETCH)
+(defun c:XKB () (vl-cmdf "XSTRETCH"))
+(defun c:xkb () (vl-cmdf "XSTRETCH"))
+(defun c:XLS () (vl-cmdf "XSTRETCH"))
+(defun c:xls () (vl-cmdf "XSTRETCH"))
 
+;; 5. 块内图元归0层
 (defun c:B0  () (c:BLOCK_LAYER_ZERO))
 (defun c:b0  () (c:BLOCK_LAYER_ZERO))
 (defun c:0B  () (c:BLOCK_LAYER_ZERO))
 (defun c:0b  () (c:BLOCK_LAYER_ZERO))
+(defun c:XGL () (c:BLOCK_LAYER_ZERO))
+(defun c:xgl () (c:BLOCK_LAYER_ZERO))
 
+;; 6. 属性文字穿透移动
 (defun c:MW  () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:mw  () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:MY  () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:my  () (c:UNIVERSAL_MOVE_TEXT))
+(defun c:XSY () (c:UNIVERSAL_MOVE_TEXT))
+(defun c:xsy () (c:UNIVERSAL_MOVE_TEXT))
 
+;; 7. 实体智能检测
 (defun c:TC  () (c:DETECT_ENTITY))
 (defun c:tc  () (c:DETECT_ENTITY))
+(defun c:XTC () (c:DETECT_ENTITY))
+(defun c:xtc () (c:DETECT_ENTITY))
 
-;; 免炸开块内穿透删除 (快捷键直通)
+;; 8. 块内穿透删除 (快捷指令直通)
 (defun c:XSC () (c:XY_BLOCK_ERASE))
+(defun c:xsc () (c:XY_BLOCK_ERASE))
 (defun c:KSC () (c:XY_BLOCK_ERASE))
+(defun c:ksc () (c:XY_BLOCK_ERASE))
 (defun c:BDE () (c:XY_BLOCK_ERASE))
+(defun c:bde () (c:XY_BLOCK_ERASE))
 
-;; 工作台面板呼出
+;; 9. 视口冻结与恢复
+(defun c:XDJ () (vl-cmdf "XDJ"))
+(defun c:xdj () (vl-cmdf "XDJ"))
+(defun c:XJD () (vl-cmdf "XJD"))
+(defun c:xjd () (vl-cmdf "XJD"))
+(defun c:XHF () (vl-cmdf "XHF"))
+(defun c:xhf () (vl-cmdf "XHF"))
+
+;; 10. 工具箱面板与设置
 (defun c:XYSZ () (c:XYPANEL))
 (defun c:xysz () (c:XYSZ))
 (defun c:ZYSZ () (c:XYSZ))
 (defun c:zysz () (c:XYSZ))
+(defun c:XGJ  () (c:XYSZ))
+(defun c:xgj  () (c:XYSZ))
 
-;; 快捷键配置与热重载
+;; 快捷键热重载
 (defun c:REKEY () (c:rekey))
 (defun c:rekey ( / sc )
   (setq sc (findfile "shortcuts.lsp"))
   (if (and sc (findfile sc))
     (load sc)
   )
-  (princ "\n[XY工具箱] 快捷键配置已重新热重载生效！\n")
+  (princ "
+[XY工具箱] 快捷键已全部刷新生效！
+")
   (princ)
 )
 

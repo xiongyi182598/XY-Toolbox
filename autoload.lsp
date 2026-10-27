@@ -1,15 +1,15 @@
 ;; ========================================================
-;; XY工具箱全套自动化工具集 (autoload.lsp)
-;; 完美兼容: 原生 AutoCAD (2020-2026) / 天正建筑 (T20/T30 全系列) / 海龙工具箱
+;; XY工具箱全套自动化工具� (autoload.lsp)
+;; 完美兼�: 原生 AutoCAD (2020-2026) / 天�建� (T20/T30 全系�) / 海龙工具�
 ;; ========================================================
 
 (vl-load-com)
 
-;; 解除高版本 AutoCAD 安全拦截机制并允许全文档加载 (借鉴海龙与源泉设计)
+;; 解除高版� AutoCAD 安全拦截机制并允许全文档加载 (借鉴海龙与源泉��)
 (if (getvar "SECURELOAD") (setvar "SECURELOAD" 0))
 (if (getvar "ACADLSPASDOC") (setvar "ACADLSPASDOC" 1))
 
-;; 全局动态定位工具箱真实主目录 (安全跨盘符、跨版本、杜绝硬编码乱码)
+;; 全局动�定位工具�真实主�� (安全跨盘符�跨版本、杜绝硬编码乱码)
 (defun xy:get-toolbox-dir ( / p )
   (cond
     ((setq p (findfile "autoload.lsp"))
@@ -20,7 +20,7 @@
   )
 )
 
-;; 自动注册当前目录到当前活跃 Profile 的受信任路径与支持搜索路径最前端
+;; �动注册当前目录到当前活跃 Profile 的受信任�径与�持搜索路径最前�
 (vl-catch-all-apply
   '(lambda ( / acad-obj prefs files cur-sup cur-tru my-dir)
      (setq my-dir (xy:get-toolbox-dir))
@@ -42,12 +42,13 @@
    )
 )
 
-;; 智能自适应扫描并加载最高版本的 .NET 核心库 (自动匹配最新 v18 或更高版)
+;; 智能�适应�描并加载�高版�� .NET 核心� (�动匹配最� v18 或更高版)
 (defun xy:load-latest-dll ( / dir dll-path )
   (setq dir (xy:get-toolbox-dir))
   (if (and dir (/= dir ""))
     (progn
-      (setq dll-path (strcat dir "/XY_Toolbox_v57.dll"))
+      (setq dll-path (strcat dir "/XY_Toolbox_v58.dll"))
+      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v57.dll")))
       (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox.dll")))
       (if (findfile dll-path)
         (progn
@@ -59,10 +60,10 @@
   )
 )
 
-;; 启动初始化时自动安全加载核心 DLL
+;; �动初始化时自动安全加载核� DLL
 (vl-catch-all-apply 'xy:load-latest-dll)
 
-;; 自动加载独立的免炸开块内穿透删除模块 (KSC/XSC)
+;; �动加载独立的免炸�块内穿�删除模� (KSC/XSC)
 (vl-catch-all-apply
   '(lambda ( / dir f )
      (setq dir (xy:get-toolbox-dir))
@@ -75,7 +76,7 @@
      (if (findfile "xy_block_erase.lsp") (load (findfile "xy_block_erase.lsp")))
    )
 )
-(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[错误] 请先加载 xy_block_erase.lsp！")))
+(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[错�] 请先加载 xy_block_erase.lsp�")))
 (defun c:XSC () (c:KSC))
 (defun c:BDE () (c:KSC))
 
@@ -454,7 +455,7 @@
 
   (if doc (setq blks (vla-get-blocks doc)))
 
-  ;; 确保目标图层存在，若不存在则自动创建并继承源图层属性
+  ;; �保目标图层存�，若不存在则�动创建并继承源图层属�
   (if (null (tblsearch "LAYER" tar))
     (vl-catch-all-apply
       '(lambda ( / src-data src-ent)
@@ -638,7 +639,7 @@
 
   (vla-endundomark doc)
 
-  ;; (vla-regen doc acAllViewports) 移除全视口重生成，杜绝黑屏
+  ;; (vla-regen doc acAllViewports) 移除全�口重生成，杜绝黑屏
 
 
 
@@ -654,7 +655,7 @@
 
                  "\n=======================================================\n"))
 
-  (princ (strcat "\n★ [XY工具箱] 图层 [" src "] 已成功合并至 [" tar "]，共处理 " (itoa count) " 个图元。\n"))
+  (princ (strcat "\n� [XY工具箱] 图层 [" src "] 已成功合并至 [" tar "]，共处理 " (itoa count) " �图元。\n"))
 
   (princ)
 
@@ -671,195 +672,70 @@
 
 
 ;; ========================================================
-;; 模块 3: 图层合并可视化面板与内置 DCL
+;; 模块 3: 图层合并�视化面板与内� DCL
 ;; ========================================================
 
 (if (null *last_tar_layer*) (setq *last_tar_layer* nil))
 (if (null *last_src_layer*) (setq *last_src_layer* nil))
 
-(defun get_dcl_fast_merge_content ()
-  (strcat
-    "fast_merge_dlg : dialog {\n"
-    "  label = \"XY工具箱 - 图层合并器\";\n"
-    "  : boxed_column {\n"
-    "    label = \"图层匹配选择\";\n"
-    "    : row {\n"
-    "      : text { label = \"源图层 (要合并/删除): \"; width = 20; }\n"
-    "      : text { key = \"txt_src\"; label = \"(请点击右侧拾取)\"; width = 24; }\n"
-    "      : button { key = \"btn_pick_src\"; label = \"图面拾取...\"; width = 14; }\n"
-    "    }\n"
-    "    : row {\n"
-    "      : text { label = \"目标层 (保留/合并到): \"; width = 20; }\n"
-    "      : text { key = \"txt_tar\"; label = \"(请点击右侧拾取)\"; width = 24; }\n"
-    "      : button { key = \"btn_pick_tar\"; label = \"图面拾取...\"; width = 14; }\n"
-    "    }\n"
-    "  }\n"
-    "  : boxed_column {\n"
-    "    label = \"合并选项 (深度穿透处理)\";\n"
-    "    : toggle {\n"
-    "      key = \"chk_bylayer\";\n"
-    "      label = \"图元强制 ByLayer 颜色 (穿透图块内部图元)\";\n"
-    "      value = \"1\";\n"
-    "    }\n"
-    "    : toggle {\n"
-    "      key = \"chk_vp\";\n"
-    "      label = \"继承视口覆盖 (视口冻结/颜色/线型/线宽同步)\";\n"
-    "      value = \"1\";\n"
-    "    }\n"
-    "  }\n"
-    "  : row {\n"
-    "    : text { label = \"提示: 确认合并后原图自动净化，支持 Ctrl+Z 一键撤回。\"; }\n"
-    "  }\n"
-    "  spacer;\n"
-    "  : row {\n"
-    "    : button { key = \"btn_cfg\"; label = \"快捷键设置(XYSZ)...\"; width = 20; }\n"
-    "    : spacer { width = 4; }\n"
-    "    : button { key = \"accept\"; label = \"确定合并\"; is_default = true; width = 14; }\n"
-    "    : button { key = \"cancel\"; label = \"取消\"; is_cancel = true; width = 10; }\n"
-    "  }\n"
-    "}\n"
-  )
-)
-
-(defun get_or_extract_dcl (dcl_name dcl_content / temp_p f)
-  (setq temp_p (strcat (getvar "TEMPPREFIX") dcl_name))
-  (setq f (open temp_p "w"))
-  (if f
-    (progn
-      (princ dcl_content f)
-      (close f)
-      temp_p
-    )
-    (or (findfile dcl_name) (findfile (strcat (xy:get-toolbox-dir) "/" dcl_name)))
-  )
-)
-
-(defun c:fast_merge ( / dcl_file dcl_id act loop src_layer tar_layer 
-                        do_bylayer inherit_vp picked)
-  ;; 优先使用 .NET 原生可视化图层合并面板 (现代界面，无闪退风险)
+;; ========================================================
+;; ģ��: �ִ�ͼ��ϲ���� (HB2 / XHB / fast_merge)
+;; ���װγ��ɰ� DCL�����������п�ݼ����ǲ������ͳһ���� C# �ִ����
+;; ========================================================
+(defun c:fast_merge ( / )
   (xy:load-latest-dll)
-  (if (vl-position "C:HB2" (atoms-family 1))
-    (vl-cmdf "HB2")
-    (progn
-      ;; 保底方案：使用原生 DCL 弹窗
-      (setq dcl_file (get_or_extract_dcl "fast_merge.dcl" (get_dcl_fast_merge_content)))
-      (if (null dcl_file)
-        (alert "未能找到或生成 fast_merge.dcl 对话框文件！")
-        (progn
-          (setq src_layer *last_src_layer*)
-          (setq tar_layer *last_tar_layer*)
-          (setq do_bylayer nil)
-          (setq inherit_vp T)
-          (setq loop T)
-          (while loop
-            (setq dcl_id (load_dialog dcl_file))
-            (if (or (null dcl_id) (<= dcl_id 0) (not (new_dialog "fast_merge_dlg" dcl_id)))
-              (progn
-                (if (and dcl_id (> dcl_id 0)) (unload_dialog dcl_id))
-                (setq loop nil)
-                ;; 若 DCL 失败，呼出侧边栏面板保底
-                (c:XYSZ)
-              )
-              (progn
-                (set_tile "chk_bylayer" (if do_bylayer "1" "0"))
-                (set_tile "chk_vp" (if inherit_vp "1" "0"))
-                (set_tile "txt_src" (if (and src_layer (/= src_layer "")) src_layer "(请点击右侧拾取)"))
-                (set_tile "txt_tar" (if (and tar_layer (/= tar_layer "")) tar_layer "(请点击右侧拾取)"))
-
-                (action_tile "btn_pick_src" "(done_dialog 2)")
-                (action_tile "btn_pick_tar" "(done_dialog 3)")
-                (action_tile "btn_cfg" "(done_dialog 4)")
-                (action_tile "accept" 
-                  "(setq do_bylayer (= (get_tile \"chk_bylayer\") \"1\")
-                         inherit_vp (= (get_tile \"chk_vp\") \"1\"))
-                   (done_dialog 1)"
-                )
-                (action_tile "cancel" "(done_dialog 0)")
-
-                (setq act (start_dialog))
-                (unload_dialog dcl_id)
-
-                (cond
-                  ((= act 1)
-                   (if (or (null src_layer) (= src_layer "") (= src_layer "(请点击右侧拾取)"))
-                     (alert "请先点击拾取【要合并的源图层】！")
-                     (if (or (null tar_layer) (= tar_layer "") (= tar_layer "(请点击右侧拾取)"))
-                       (alert "请先点击拾取【目标图层】！")
-                       (if (= (strcase src_layer) (strcase tar_layer))
-                         (alert "源图层与目标图层不能相同！")
-                         (progn
-                           (setq loop nil)
-                           (execute_layer_merge src_layer tar_layer do_bylayer inherit_vp)
-                         )
-                       )
-                     )
-                   )
-                  )
-                  ((= act 2)
-                   (setq picked (pick_layer_from_entity "\n请在图面上点选【要合并/删除的源图层】图元: "))
-                   (if picked
-                     (progn
-                       (setq src_layer picked)
-                       (setq *last_src_layer* picked)
-                     )
-                   )
-                  )
-                  ((= act 3)
-                   (setq picked (pick_layer_from_entity "\n请在图面上点选【合并保留的目标图层】图元: "))
-                   (if picked
-                     (progn
-                       (setq tar_layer picked)
-                       (setq *last_tar_layer* picked)
-                     )
-                   )
-                  )
-                  ((= act 4)
-                   (c:XYSZ)
-                  )
-                  (t
-                   (setq loop nil)
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
+  (cond
+    ;; 1. �� C# ע���� LISP ԭ���ӿڣ�����ֱ�ӵ���
+    ((vl-position "XY_SHOW_LAYERMERGE" (atoms-family 1))
+     (xy_show_layermerge)
+    )
+    ;; 2. ����ͨ��ԭ���ײ����� _.HBDLG ���� (����ͬ�� HB2 �����ݹ�����)
+    (t
+     (if (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.HBDLG")))
+       (if (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.XHB")))
+         (c:XYSZ)
+       )
+     )
     )
   )
   (princ)
 )
 
+(defun c:HB2 () (c:fast_merge))
+(defun c:hb2 () (c:fast_merge))
+(defun c:XHB () (c:fast_merge))
+(defun c:xhb () (c:fast_merge))
+
 (defun c:fast_merge_quick ()
-  ;; 优先使用 .NET 原生内存级极速合并 (0.005秒，零空间切换，零黑屏)
+  ;; 优先使用 .NET 原生内存级极速合� (0.005秒，零空间切�，零黑屏)
   (xy:load-latest-dll)
-  (if (vl-position "C:HB1" (atoms-family 1))
-    (vl-cmdf "HB1")
+  (if (not (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.FASTMERGE"))))
+    (princ)
     (progn
       (setvar "CMDECHO" 0)
       (princ "\n=======================================================")
-      (princ "\n>>> 极速图层合并 (免弹窗点选合并) <<<")
-      (setq src-lyr (pick_layer_from_entity "\n1. 请在图面上点选【源图层】图元: "))
+      (princ "\n>>> 极�图层合� (免弹窗点选合�) <<<")
+      (setq src-lyr (pick_layer_from_entity "\n1. 请在图面上点选�源图层】图�: "))
       (if src-lyr
         (progn
-          (princ (strcat " -> 已选源图层: [" src-lyr "]"))
+          (princ (strcat " -> 已�源图层: [" src-lyr "]"))
           (setq *last_src_layer* src-lyr)
           (setq tar-lyr (pick_layer_from_entity 
                           (if *last_tar_layer*
-                            (strcat "\n2. 请点选【目标图层】图元 (直接回车默认: [" *last_tar_layer* "]): ")
-                            "\n2. 请在图面上点选【目标图层】图元: ")))
+                            (strcat "\n2. 请点选�目标图层�图� (直接回车默�: [" *last_tar_layer* "]): ")
+                            "\n2. 请在图面上点选�目标图层�图�: ")))
           (if (and (null tar-lyr) *last_tar_layer*)
             (setq tar-lyr *last_tar_layer*)
           )
           (if tar-lyr
             (if (= (strcase src-lyr) (strcase tar-lyr))
-              (princ "\n[提示] 源图层与目标图层相同，无需合并。")
+              (princ "\n[提示] 源图层与�标图层相同，无需合并�")
               (progn
                 (setq *last_tar_layer* tar-lyr)
                 (execute_layer_merge src-lyr tar-lyr T T)
               )
             )
-            (princ "\n[提示] 未指定目标图层，操作已取消。")
+            (princ "\n[提示] �指定�标图层，操作已取消�")
           )
         )
       )
@@ -875,7 +751,7 @@
 
   (if doc (setq blks (vla-get-blocks doc)))
 
-  ;; 确保目标图层存在，若不存在则自动创建并继承源图层属性
+  ;; �保目标图层存�，若不存在则�动创建并继承源图层属�
   (if (null (tblsearch "LAYER" tar))
     (vl-catch-all-apply
       '(lambda ( / src-data src-ent)
@@ -966,7 +842,7 @@
 
       (vla-endundomark doc)
 
-      ;; (vla-regen doc acAllViewports) 移除全视口重生成，杜绝黑屏
+      ;; (vla-regen doc acAllViewports) 移除全�口重生成，杜绝黑屏
 
       (princ (strcat "\n======================================================="
 
@@ -982,7 +858,7 @@
 
     )
 
-    (princ "\n>>> δκ顣\n")
+    (princ "\n>>> δκ�\n")
 
   )
 
@@ -1001,14 +877,14 @@
 
 
 ;; ========================================================
-;; 模块 5: 属性块文字穿透平移 (MW / MY / UNIVERSAL_MOVE_TEXT)
-;; 优先调用 .NET 原生 DrawJig（支持任意视口比例自适应、独立文字实时拖拽、精确距离输入）
+;; 模块 5: 属�块文字穿�平� (MW / MY / UNIVERSAL_MOVE_TEXT)
+;; 优先调用 .NET 原生 DrawJig（支持任意�口比例�适应、独立文字实时拖拽�精�距�输入）
 ;; ========================================================
 
 (defun c:UNIVERSAL_MOVE_TEXT ( / )
   (vl-catch-all-apply 'xy:load-latest-dll)
 
-;; 自动加载独立的免炸开块内穿透删除模块 (KSC/XSC)
+;; �动加载独立的免炸�块内穿�删除模� (KSC/XSC)
 (vl-catch-all-apply
   '(lambda ( / dir f )
      (setq dir (xy:get-toolbox-dir))
@@ -1021,7 +897,7 @@
      (if (findfile "xy_block_erase.lsp") (load (findfile "xy_block_erase.lsp")))
    )
 )
-(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[错误] 请先加载 xy_block_erase.lsp！")))
+(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[错�] 请先加载 xy_block_erase.lsp�")))
 (defun c:XSC () (c:KSC))
 (defun c:BDE () (c:KSC))
 
@@ -1159,7 +1035,7 @@
 
             (setq line (vl-string-trim " \t\r\n" line))
 
-            ;; 过滤 UTF-8 BOM 或特殊隐藏字符
+            ;; 过滤 UTF-8 BOM 或特殊隐藏字�
 
             (while (and (> (strlen line) 0) 
 
@@ -1179,7 +1055,7 @@
 
                   (setq val (substr line (+ (vl-string-search "=" line) 2)))
 
-                  ;; 去除键名中的 BOM 或不可见字符
+                  ;; 去除�名中� BOM 或不�见字�
 
                   (setq k (vl-string-trim " \t\r\n" k))
 
@@ -1234,9 +1110,9 @@
 
       (write-line "; ========================================================" f)
 
-      (write-line "; XY工具箱 - 快捷键配置文件 (shortcuts.ini)" f)
+      (write-line "; XY工具� - �捷键配置文件 (shortcuts.ini)" f)
 
-      (write-line "; 支持逗号隔开多个别名，修改后输入 REKEY 即可立即刷新生效" f)
+      (write-line "; �持�号隔开多个�名，�改后输入 REKEY 即可立即刷新生效" f)
 
       (write-line "; ========================================================" f)
 
@@ -1347,7 +1223,7 @@
 
 
 
-  ;; 动态绑定所有快捷键 (支持多别名与大小写不敏感)
+  ;; 动�绑定所有快捷键 (�持�别名与大小写不敏感)
 
   (bind_alias_to_command cmd_quick 'c:fast_merge_quick)
 
@@ -1365,7 +1241,7 @@
 
 
 
-  ;; 确保用户自定义快捷键与常用快捷键均可使用
+  ;; �保用户自定义�捷键与常用快捷键均可使用
 
   (if (null (read "c:HB1")) (defun c:HB1 () (c:fast_merge_quick)))
 
@@ -1394,7 +1270,7 @@
 
 ;; ========================================================
 
-;; 提资侧边栏面板呼出命令 (XYSZ / ZYSZ)
+;; 提资侧边栏面板呼出命� (XYSZ / ZYSZ)
 
 ;; ========================================================
 
@@ -1416,7 +1292,7 @@
 
 ;; ========================================================
 
-;; 快捷键自定义设置命令 (SETKEY / KJSZ / CFG)
+;; �捷键�定义设置命令 (SETKEY / KJSZ / CFG)
 
 ;; ========================================================
 
@@ -1439,13 +1315,13 @@
 
           (startapp "notepad.exe" ini_path)
 
-          (princ "\n★ [XY工具箱] 已在记事本中打开快捷键文件 shortcuts.ini。")
+          (princ "\n� [XY工具箱] 已在记事��打开�捷键文件 shortcuts.ini�")
 
-          (princ "\n★ 修改并保存后，在命令行输入 REKEY 即可立即刷新生效！\n")
+          (princ "\n� �改并保存后，在命令�输� REKEY 即可立即刷新生效！\n")
 
         )
 
-        (alert "未找到快捷键配置文件 shortcuts.ini！")
+        (alert "�找到�捷键配置文件 shortcuts.ini�")
 
       )
 
@@ -1471,7 +1347,7 @@
 
 ;; ========================================================
 
-;; 快捷键热重载命令 (REKEY / RELOADKEY)
+;; �捷键�重载命令 (REKEY / RELOADKEY)
 
 ;; ========================================================
 
@@ -1501,19 +1377,19 @@
 
   (princ "\n========================================================")
 
-  (princ "\n  ★ [XY工具箱] 快捷键已成功重新加载生效！")
+  (princ "\n  � [XY工具箱] �捷键已成功重新加载生效！")
 
-  (princ (strcat "\n  1. 图层极速合并 (免弹窗)   : 【 " _mq " 】"))
+  (princ (strcat "\n  1. 图层极�合� (免弹�)   : � " _mq " �"))
 
-  (princ (strcat "\n  2. 图层合并面板 (选择版)   : 【 " _m  " 】"))
+  (princ (strcat "\n  2. 图层合并面板 (选择�)   : � " _m  " �"))
 
-  (princ (strcat "\n  3. 图块一键深度归0层       : 【 " _b0 " 】"))
+  (princ (strcat "\n  3. 图块��深度�0�       : � " _b0 " �"))
 
-  (princ (strcat "\n  4. 属性块文字同步平移      : 【 " _my " 】"))
+  (princ (strcat "\n  4. 属�块文字同�平�      : � " _my " �"))
 
-  (princ (strcat "\n  5. 底层图元穿透探测        : 【 " _tc " 】"))
+  (princ (strcat "\n  5. 底层图元穿�探�        : � " _tc " �"))
 
-  (princ (strcat "\n  6. 提资面板呼出快捷键      : 【 " _p  " 】"))
+  (princ (strcat "\n  6. 提资面板呼出�捷键      : � " _p  " �"))
 
   (princ "\n========================================================\n")
 
@@ -1527,7 +1403,7 @@
 
 ;; ========================================================
 
-;; 启动时应用快捷键并打印就绪提示
+;; �动时应用�捷键并打印就�提示
 
 ;; ========================================================
 
@@ -1559,25 +1435,25 @@
 
 (princ "\n========================================================")
 
-(princ "\n  ★ XY工具箱全套工具集 - 加载成功")
+(princ "\n  � XY工具箱全套工具集 - 加载成功")
 
-(princ (strcat "\n  1. 图层极速合并 (免弹窗)   : 【 " _mq " 】"))
+(princ (strcat "\n  1. 图层极�合� (免弹�)   : � " _mq " �"))
 
-(princ (strcat "\n  2. 图层合并面板 (选择版)   : 【 " _m  " 】"))
+(princ (strcat "\n  2. 图层合并面板 (选择�)   : � " _m  " �"))
 
-(princ (strcat "\n  3. 图块一键深度归0层       : 【 " _b0 " 】"))
+(princ (strcat "\n  3. 图块��深度�0�       : � " _b0 " �"))
 
-(princ (strcat "\n  4. 属性块文字同步平移      : 【 " _my " 】"))
+(princ (strcat "\n  4. 属�块文字同�平�      : � " _my " �"))
 
-(princ (strcat "\n  5. 底层图元穿透探测        : 【 " _tc " 】"))
+(princ (strcat "\n  5. 底层图元穿�探�        : � " _tc " �"))
 
 (princ "\n  --------------------------------------------------------")
 
-(princ (strcat "\n  ★ 深化提资侧边栏面板呼出  : 【 " _p " 】"))
+(princ (strcat "\n  � 深化提资侧边栏面板呼�  : � " _p " �"))
 
-(princ "\n  ★ 自定义快捷键设置        : 【 SETKEY / KJSZ 】")
+(princ "\n  � �定义�捷键设置        : � SETKEY / KJSZ �")
 
-(princ "\n  ★ 快捷键重新加载生效      : 【 REKEY 】")
+(princ "\n  � �捷键重新加载生效      : � REKEY �")
 
 (princ "\n========================================================\n")
 
@@ -1587,7 +1463,7 @@
 
 
 ;; ========================================================
-;; 加载用户自定义快捷键 (shortcuts.lsp)
+;; 加载用户�定义�捷键 (shortcuts.lsp)
 ;; ========================================================
 (if (findfile "shortcuts.lsp")
   (load (findfile "shortcuts.lsp"))
@@ -1603,9 +1479,9 @@
 (princ)
 
 ;; ========================================================
-;; 一键热更新命令 (无需记忆复杂路径，命令行输入 RELOAD 即可秒级刷新)
+;; ���更新命令 (无需记忆复杂�径，命令行输� RELOAD 即可秒级刷新)
 ;; ========================================================
-;; 一键重置视口图层覆盖 (VPR)
+;; ��重置视口图层覆盖 (VPR)
 (defun c:VPR ( / doc lt ltr )
   (vl-load-com)
   (setq doc (if (vlax-get-acad-object) (vla-get-activedocument (vlax-get-acad-object))))
@@ -1621,32 +1497,35 @@
            )
          )
          (vla-endundomark doc)
-         ;; (vla-regen doc acAllViewports) 移除全视口重生成，杜绝黑屏
+         ;; (vla-regen doc acAllViewports) 移除全�口重生成，杜绝黑屏
        )
     )
   )
-  (princ "\n★ [XY工具箱] 视口图层覆盖已成功重置！\n")
+  (princ "\n� [XY工具箱] 视口图层覆盖已成功重�！\n")
   (princ)
 )
 (defun c:reset_vp_overrides () (c:VPR))
 
-;; 一键深度清理冗余数据 (PU)
+;; ��深度清理冗余数据 (PU)
 (defun c:PU ( / )
   (setvar "CMDECHO" 0)
   (command "_.purge" "_all" "*" "_no")
   (command "_.audit" "_y")
   (setvar "CMDECHO" 1)
-  (princ "\n★ [XY工具箱] 图纸深度清理与修复完成！\n")
+  (princ "\n� [XY工具箱] 图纸深度清理与修复完成！\n")
   (princ)
 )
 
 
 ;; ========================================================
-;; XY工具箱 - X前缀拼音首字母标准快捷指令集 (兼容海龙/天正)
+;; XY工具� - X前缀拼音首字母标准快捷指令集 (兼�海�/天�)
 ;; ========================================================
 (defun c:XGJ () (if c:XYSZ (c:XYSZ) (princ "\n请先加载 XY工具箱！")))
 (defun c:XYGJ () (c:XGJ))
-(defun c:XHB () (if c:HB2 (c:HB2) (princ "\n请先加载 XY工具箱！")))
+(defun c:XHB () (c:fast_merge))
+(defun c:xhb () (c:fast_merge))
+(defun c:HB2 () (c:fast_merge))
+(defun c:hb2 () (c:fast_merge))
 (defun c:XJH () (if c:fast_merge_quick (c:fast_merge_quick) (princ "\n请先加载 XY工具箱！")))
 (defun c:XDJ () (command "XDJ") (princ))
 (defun c:XJD () (command "XJD") (princ))
@@ -1678,19 +1557,19 @@
           (if (findfile erase_f) (load erase_f))
         )
       )
-      (defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[错误] 未能成功加载穿透删除内核！")))
+      (defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[错�] �能成功加载穿透删除内核！")))
       (defun c:XSC () (c:KSC))
       (defun c:BDE () (c:KSC))
       (if apply_all_toolbox_shortcuts
         (apply_all_toolbox_shortcuts)
       )
       (princ "\n========================================================")
-      (princ "\n★ [XY工具箱] 重载成功 (XCZ)！")
-      (princ "\n★ 侧边栏面板与穿透删除内核已刷新就绪")
-      (princ "\n★ 快捷命令随时可用：KSC / XSC / BDE / XHB / HB1")
+      (princ "\n� [XY工具箱] 重载成功 (XCZ)�")
+      (princ "\n� 侧边栏面板与穿�删除内核已刷新就绪")
+      (princ "\n� �捷命令随时可�：KSC / XSC / BDE / XHB / HB1")
       (princ "\n========================================================\n")
     )
-    (princ "\n[错误] 未找到 autoload.lsp 文件！\n")
+    (princ "\n[错�] �找到 autoload.lsp 文件！\n")
   )
   (princ)
 )
@@ -1698,11 +1577,11 @@
 (defun c:XYLOAD () (c:RELOAD))
 ;; (c:XY removed to avoid conflict with Hailong)
 
-;; 默认就绪加载：确保 CAD 启动或重载时工作台处于自动显示状态 (与海龙/天正一致)
+;; 默�就�加载：确� CAD �动或重载时工作台处于�动显示状� (与海�/天�一�)
 (vl-catch-all-apply
   '(lambda ()
        (princ "
-[XY工具箱] 核心程序已静默就绪！键入 XGJ 打开工作台，键入 XKJ 设置快捷键。
+[XY工具箱] 核心程序已静默就�！键� XGJ 打开工作台，�� XKJ 设置�捷键�
 ")
    )
 )

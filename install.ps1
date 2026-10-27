@@ -1,4 +1,4 @@
-﻿# ========================================================
+# ========================================================
 # XY工具箱 - 官方原生绿色一键安装器 (install.ps1)
 # 官方标准 .NET 注册架构 (MANAGED=1, LOADCTRLS=2)
 # 零冲突: 完美支持 AutoCAD (2020-2026) / 天正建筑 (T20/T30 全系列) / 海龙工具箱
@@ -27,6 +27,17 @@ try {
 } catch {
     Write-Host "  [!] 解锁文件提示: $_" -ForegroundColor Gray
 }
+
+# 0.1 自动同步最新的编译版本库为标准 XY_Toolbox.dll
+try {
+    $latestVerDll = Get-ChildItem -Path $ToolboxDir -Filter "XY_Toolbox_v*.dll" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latestVerDll -and (Test-Path $latestVerDll.FullName)) {
+        if ((-not (Test-Path $DllPath)) -or ($latestVerDll.LastWriteTime -gt (Get-Item $DllPath).LastWriteTime)) {
+            Copy-Item -Path $latestVerDll.FullName -Destination $DllPath -Force -ErrorAction SilentlyContinue
+            Write-Host "  [OK] 0.1 已自动将最新编译内核 ($($latestVerDll.Name)) 部署为标准 XY_Toolbox.dll" -ForegroundColor Green
+        }
+    }
+} catch { }
 
 # 1. 穿透全机所有用户注册表，向 Applications\XY_Toolbox_Net 写入官方标准托管 .NET 启动项
 $AcadRegTargets = @("HKCU:\Software\Autodesk\AutoCAD")

@@ -303,7 +303,7 @@ namespace XY_Deepening_Toolbox
             }
         }
 
-        // 图层合并独立可视化弹窗 (HB2 / HBDLG / LYRMERGE)
+        // 图层合并独立可视化弹窗 (HB2 / HBDLG / XHB / LYRMERGE)
         [CommandMethod("XHB")]
         [CommandMethod("HB2")]
         [CommandMethod("HBDLG")]
@@ -322,6 +322,13 @@ namespace XY_Deepening_Toolbox
             {
                 MessageBox.Show("打开图层合并面板失败: " + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        [LispFunction("xy_show_layermerge")]
+        public static object LispShowLayerMergeDialog(ResultBuffer args)
+        {
+            ShowLayerMergeDialog();
+            return null;
         }
 
         // 图层深度对比与智能合并系统 (LYCOMPARE / TCH_COMPARE / XYCOMPARE / LYC)
