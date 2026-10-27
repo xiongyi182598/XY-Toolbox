@@ -1011,6 +1011,285 @@ namespace XY_Deepening_Toolbox
 
 
         // ========================================================
+        // 图块镜像反字智能穿透纠偏 (FZW / XFZ / CORRECTTEXT)
+        // 核心技术特性：
+        // 1. 负负得正几何补偿：穿透检测被镜像（MI）图块内部的属性字/普通字，智能施加反向镜像标志
+        // 2. 几何中心严格锁定：翻转前后自动计算世界坐标系（WCS）几何包围盒中心，反向补偿位移向量，文字原地翻转绝不位移
+        // 3. 智能分支克隆保护：当图块内普通文字被修改时，若图纸存在其他正常引用的块，自动创建独立克隆分支，绝不破坏正常图块
+        // 4. 大面积极速批量框选：支持框选成百上千个图块与独立文字，秒级自动识别反字并纠偏，正常图块自动跳过
+        // ========================================================
+        [CommandMethod("FZW")]
+        [CommandMethod("XFZ")]
+        [CommandMethod("CORRECTTEXT")]
+        [CommandMethod("XY_FIXTEXT")]
+        public static void CorrectMirroredBlockText()
+        {
+            EnsureLspLoaded();
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+
+            PromptSelectionOptions pso = new PromptSelectionOptions();
+            pso.MessageForAdding = "\n>> 请框选或点选需要翻正文字的图块或文字 (支持大面积框选，按ESC或回车结束): ";
+            pso.AllowDuplicates = false;
+
+            TypedValue[] tvs = new TypedValue[]
+            {
+                new TypedValue((int)DxfCode.Operator, "<OR"),
+                new TypedValue((int)DxfCode.Start, "INSERT"),
+                new TypedValue((int)DxfCode.Start, "TEXT"),
+                new TypedValue((int)DxfCode.Start, "MTEXT"),
+                new TypedValue((int)DxfCode.Operator, "OR>")
+            };
+            SelectionFilter filter = new SelectionFilter(tvs);
+
+            PromptSelectionResult psr = ed.GetSelection(pso, filter);
+            if (psr.Status != PromptStatus.OK || psr.Value == null || psr.Value.Count == 0)
+            {
+                return;
+            }
+
+            int totalScanned = 0;
+            int attrFixed = 0;
+            int blockDefFixed = 0;
+            int plainFixed = 0;
+            int normalSkipped = 0;
+
+            using (doc.LockDocument())
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
+                {
+                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+
+                    foreach (SelectedObject so in psr.Value)
+                    {
+                        if (so == null || so.ObjectId.IsNull) continue;
+                        totalScanned++;
+
+                        DBObject obj = tr.GetObject(so.ObjectId, OpenMode.ForRead);
+                        BlockReference blkRef = obj as BlockReference;
+                        if (blkRef != null)
+                        {
+                            Matrix3d tf = blkRef.BlockTransform;
+                            CoordinateSystem3d cs = tf.CoordinateSystem3d;
+                            double det = cs.Xaxis.CrossProduct(cs.Yaxis).DotProduct(cs.Zaxis);
+                            bool isBlockMirrored = (blkRef.ScaleFactors.X * blkRef.ScaleFactors.Y < -1e-6) || (det < -1e-6);
+
+                            // 1. 处理属性文字
+                            if (blkRef.AttributeCollection != null && blkRef.AttributeCollection.Count > 0)
+                            {
+                                foreach (ObjectId attId in blkRef.AttributeCollection)
+                                {
+                                    AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                                    if (attRef != null)
+                                    {
+                                        bool isVisuallyMirrored = isBlockMirrored ^ attRef.IsMirroredInX ^ attRef.IsMirroredInY;
+                                        if (isVisuallyMirrored)
+                                        {
+                                            Point3d centerBefore = GetEntityCenterSafe(attRef);
+                                            attRef.UpgradeOpen();
+                                            attRef.IsMirroredInX = !attRef.IsMirroredInX;
+                                            attRef.AdjustAlignment(db);
+
+                                            Point3d centerAfter = GetEntityCenterSafe(attRef);
+                                            Vector3d offset = centerBefore - centerAfter;
+                                            if (offset.Length > 1e-6)
+                                            {
+                                                attRef.TransformBy(Matrix3d.Displacement(offset));
+                                                attRef.AdjustAlignment(db);
+                                            }
+                                            attrFixed++;
+                                        }
+                                        else
+                                        {
+                                            normalSkipped++;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 2. 如果外部被镜像，检查块定义内部普通文字
+                            if (isBlockMirrored)
+                            {
+                                bool btrFixed = FixBlockDefinitionTextInternal(blkRef, tr, db, bt);
+                                if (btrFixed)
+                                {
+                                    blockDefFixed++;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // 3. 散放普通文字
+                            DBText txt = obj as DBText;
+                            if (txt != null)
+                            {
+                                if (txt.IsMirroredInX ^ txt.IsMirroredInY)
+                                {
+                                    Point3d cBefore = GetEntityCenterSafe(txt);
+                                    txt.UpgradeOpen();
+                                    txt.IsMirroredInX = !txt.IsMirroredInX;
+                                    txt.AdjustAlignment(db);
+                                    Point3d cAfter = GetEntityCenterSafe(txt);
+                                    Vector3d off = cBefore - cAfter;
+                                    if (off.Length > 1e-6)
+                                    {
+                                        txt.TransformBy(Matrix3d.Displacement(off));
+                                        txt.AdjustAlignment(db);
+                                    }
+                                    plainFixed++;
+                                }
+                                else
+                                {
+                                    normalSkipped++;
+                                }
+                            }
+                        }
+                    }
+
+                    tr.Commit();
+                }
+            }
+
+            int totalFixed = attrFixed + blockDefFixed + plainFixed;
+            ed.WriteMessage(string.Format(
+                "\n=======================================================\n" +
+                "[XY工具箱] 翻正处理完毕 (FZW)！\n" +
+                "  • 扫描图元: {0} 个\n" +
+                "  • 成功翻正: {1} 处 (属性文字: {2}, 块内普通文字: {3}, 独立文字: {4})\n" +
+                "  • 正常跳过: {5} 处\n" +
+                "=======================================================\n",
+                totalScanned, totalFixed, attrFixed, blockDefFixed, plainFixed, normalSkipped));
+        }
+
+        private static bool FixBlockDefinitionTextInternal(BlockReference blkRef, Transaction tr, Database db, BlockTable bt)
+        {
+            BlockTableRecord btr = tr.GetObject(blkRef.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+            if (btr == null || btr.IsLayout || btr.IsAnonymous) return false;
+
+            List<ObjectId> textIds = new List<ObjectId>();
+            foreach (ObjectId id in btr)
+            {
+                if (id.ObjectClass.DxfName.Equals("TEXT", StringComparison.OrdinalIgnoreCase))
+                {
+                    DBText t = tr.GetObject(id, OpenMode.ForRead) as DBText;
+                    if (t != null)
+                    {
+                        // 外部块被镜像，内部文字如果没设镜像则视觉为反
+                        bool isVisuallyMirrored = true ^ t.IsMirroredInX ^ t.IsMirroredInY;
+                        if (isVisuallyMirrored)
+                        {
+                            textIds.Add(id);
+                        }
+                    }
+                }
+            }
+
+            if (textIds.Count == 0) return false;
+
+            ObjectIdCollection refIds = btr.GetBlockReferenceIds(true, false);
+            if (refIds.Count <= 1)
+            {
+                // 仅此一个引用，直接修改原定义
+                btr.UpgradeOpen();
+                foreach (ObjectId tid in textIds)
+                {
+                    DBText t = tr.GetObject(tid, OpenMode.ForWrite) as DBText;
+                    if (t != null)
+                    {
+                        Point3d cBefore = GetEntityCenterSafe(t);
+                        t.IsMirroredInX = !t.IsMirroredInX;
+                        t.AdjustAlignment(db);
+                        Point3d cAfter = GetEntityCenterSafe(t);
+                        Vector3d off = cBefore - cAfter;
+                        if (off.Length > 1e-6)
+                        {
+                            t.TransformBy(Matrix3d.Displacement(off));
+                            t.AdjustAlignment(db);
+                        }
+                    }
+                }
+                return true;
+            }
+            else
+            {
+                // 存在其他引用，克隆独立分支块定义
+                string newBlockName = GetUniqueBlockName(bt, btr.Name + "_FZ");
+                BlockTableRecord newBtr = new BlockTableRecord();
+                newBtr.Name = newBlockName;
+                newBtr.Origin = btr.Origin;
+
+                bt.UpgradeOpen();
+                ObjectId newBtrId = bt.Add(newBtr);
+                tr.AddNewlyCreatedDBObject(newBtr, true);
+
+                foreach (ObjectId id in btr)
+                {
+                    Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null) continue;
+
+                    Entity clonedEnt = ent.Clone() as Entity;
+                    DBText txt = clonedEnt as DBText;
+                    if (txt != null && textIds.Contains(id))
+                    {
+                        Point3d cBefore = GetEntityCenterSafe(txt);
+                        txt.IsMirroredInX = !txt.IsMirroredInX;
+                        txt.AdjustAlignment(db);
+                        Point3d cAfter = GetEntityCenterSafe(txt);
+                        Vector3d off = cBefore - cAfter;
+                        if (off.Length > 1e-6)
+                        {
+                            txt.TransformBy(Matrix3d.Displacement(off));
+                            txt.AdjustAlignment(db);
+                        }
+                    }
+
+                    newBtr.AppendEntity(clonedEnt);
+                    tr.AddNewlyCreatedDBObject(clonedEnt, true);
+                }
+
+                blkRef.UpgradeOpen();
+                blkRef.BlockTableRecord = newBtrId;
+                return true;
+            }
+        }
+
+        private static string GetUniqueBlockName(BlockTable bt, string baseName)
+        {
+            if (!bt.Has(baseName)) return baseName;
+            int idx = 1;
+            while (bt.Has(baseName + "_" + idx))
+            {
+                idx++;
+            }
+            return baseName + "_" + idx;
+        }
+
+        private static Point3d GetEntityCenterSafe(Entity ent)
+        {
+            try
+            {
+                Extents3d ext = ent.GeometricExtents;
+                return new Point3d(
+                    (ext.MinPoint.X + ext.MaxPoint.X) * 0.5,
+                    (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5,
+                    (ext.MinPoint.Z + ext.MaxPoint.Z) * 0.5);
+            }
+            catch
+            {
+                DBText txt = ent as DBText;
+                if (txt != null)
+                {
+                    if (txt.Justify != AttachmentPoint.BaseLeft)
+                        return txt.AlignmentPoint;
+                    return txt.Position;
+                }
+                return Point3d.Origin;
+            }
+        }
+
+        // ========================================================
         // 属性块单字穿透动态平移 (MW / MY / MOVETEXT)
         // 核心亮点：
         // 1. 同名块全部同步更新：修改一处，全图（模型+所有布局空间）同名图块全部联动平移
@@ -3761,19 +4040,22 @@ namespace XY_Deepening_Toolbox
             RegisterSection(sec1);
 
             // 分类 2: 图块工具 (默认展开，方便直观查看)
-            CategorySection sec2 = CreateCategorySection("图块工具", 4, true);
+            CategorySection sec2 = CreateCategorySection("图块工具", 5, true);
             AddItemRowToSection(sec2, "✂️", "穿透删除", "KSC", 
                 "穿透删除 (KSC)\n免炸开直接点选或框选穿透删除块内图元，按 M 键自由切换【同名块全部联动】或【仅改当前(独占)】模式 (别名: XSC, BDE)", 
                 () => SendCadCommand("KSC "));
+            AddItemRowToSection(sec2, "🔤", "翻正反字", "FZW", 
+                "翻正反字 (FZW / XFZ)\n智能穿透图块，大面积框选秒级原位翻正被镜像的反字，几何中心严格锁死，绝不位移 (支持属性字/块内普通字)", 
+                () => SendCadCommand("FZW "));
+            AddItemRowToSection(sec2, "✏️", "原位编块", "XKB", 
+                "原位编块 (XKB / XLS)\n免在位编辑/免炸开，直接外部框选块内线条静默S拉伸或M平移，像没成块一样无感修改", 
+                () => SendCadCommand("XKB "));
             AddItemRowToSection(sec2, "↔️", "属性平移", "XSY", 
                 "属性平移 (XSY)\n单字穿透平移，实时Jig动态拖动预览，全图模型与视口同名图块全部联动同步", 
                 () => SendCadCommand("XSY "));
             AddItemRowToSection(sec2, "🧹", "图块归零", "XGL", 
                 "图块归零 (XGL)\n穿透嵌套块，彻底清洗全图所有图块内部图元至0层，颜色线型归ByLayer", 
                 () => SendCadCommand("XGL "));
-            AddItemRowToSection(sec2, "✏️", "原位编块", "XKB", 
-                "原位编块 (XKB / XLS)\n免在位编辑/免炸开，直接外部框选块内线条静默S拉伸或M平移，像没成块一样无感修改", 
-                () => SendCadCommand("XKB "));
             RegisterSection(sec2);
 
             // 分类 3: 辅助工具 (默认折叠)

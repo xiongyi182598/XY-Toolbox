@@ -32,6 +32,12 @@
 (if (null (read "c:HC")) (defun c:HC () (c:fast_merge_quick)))
 (if (null (read "c:hc")) (defun c:hc () (c:fast_merge_quick)))
 
+;; 3.1 Í¼¿é¾µÏñ·´×ÖÖÇÄÜ´©Í¸¾ÀÆ« (FZW / XFZ / CORRECTTEXT)
+(defun c:FZW () (vl-cmdf "FZW"))
+(defun c:fzw () (vl-cmdf "FZW"))
+(defun c:XFZ () (vl-cmdf "FZW"))
+(defun c:xfz () (vl-cmdf "FZW"))
+
 ;; 4. Ô­Î»±à¿éÃâ½ø±à¼­´©Í¸À­ÉìÓëÒÆ¶¯ (XKB / XLS / XSTRETCH)
 (defun c:XKB () (vl-cmdf "XSTRETCH"))
 (defun c:xkb () (vl-cmdf "XSTRETCH"))
