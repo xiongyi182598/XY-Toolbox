@@ -42,18 +42,26 @@
    )
 )
 
-;; 鏅鸿兘鑷閫傚簲鎵鎻忓苟鍔犺浇鏈楂樼増鏈鐨 .NET 鏍稿績搴 (鑷鍔ㄥ尮閰嶆渶鏂 v18 鎴栨洿楂樼増)
-(defun xy:load-latest-dll ( / dir dll-path )
+;; 商业级自适应动态加载器 (动态识别最高版本增量库，保底标准正式库)
+(defun xy:load-latest-dll ( / dir dll-path max-ver p )
   (setq dir (xy:get-toolbox-dir))
   (if (and dir (/= dir ""))
     (progn
-      (setq dll-path (strcat dir "/XY_Toolbox_v61.dll"))
-      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v60.dll")))
-      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v59.dll")))
-      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v58.dll")))
-      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox_v57.dll")))
-      (if (null (findfile dll-path)) (setq dll-path (strcat dir "/XY_Toolbox.dll")))
-      (if (findfile dll-path)
+      ;; 1. 优先扫描当前目录下版本号最高的增量内核 (向下智能递减匹配)
+      (setq max-ver 100)
+      (while (and (> max-ver 50) (null dll-path))
+        (setq p (strcat dir "/XY_Toolbox_v" (itoa max-ver) ".dll"))
+        (if (findfile p)
+          (setq dll-path p)
+          (setq max-ver (1- max-ver))
+        )
+      )
+      ;; 2. 若无临时增量版本，则直接加载官方标准正式内核 XY_Toolbox.dll
+      (if (null dll-path)
+        (setq dll-path (strcat dir "/XY_Toolbox.dll"))
+      )
+      ;; 3. 执行安全托管加载
+      (if (and dll-path (findfile dll-path))
         (progn
           (vl-cmdf "_.netload" dll-path)
           dll-path
@@ -62,8 +70,6 @@
     )
   )
 )
-
-;; 鍚鍔ㄥ垵濮嬪寲鏃惰嚜鍔ㄥ畨鍏ㄥ姞杞芥牳蹇 DLL
 (vl-catch-all-apply 'xy:load-latest-dll)
 
 ;; 鑷鍔ㄥ姞杞界嫭绔嬬殑鍏嶇偢寮鍧楀唴绌块忓垹闄ゆā鍧 (KSC/XSC)

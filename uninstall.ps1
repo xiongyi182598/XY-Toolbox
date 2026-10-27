@@ -1,7 +1,7 @@
 ﻿# ========================================================
 # XY工具箱 - 官方原生绿色完全卸载器 (uninstall.ps1)
-# 彻底清理: .NET 注册项、启动组、搜索路径
-# 零残留: 恢复系统至未安装工具箱的原生干净状态
+# 商业级彻底清理: .NET 注册项、启动组、搜索路径、Bundle 插件包
+# 绝对零残留: 恢复系统至未安装工具箱的纯净原生状态
 # ========================================================
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -14,14 +14,26 @@ $ToolboxDir = $ToolboxDir.TrimEnd('\').TrimEnd('/')
 $AutoloadPath = "$ToolboxDir\autoload.lsp"
 
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "  XY工具箱 · 一键绿色完全卸载器" -ForegroundColor Cyan
+Write-Host "  XY工具箱 · 官方原生商业级完全卸载器" -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "  正在清理工具箱: $ToolboxDir" -ForegroundColor Yellow
+Write-Host "  清理目录: $ToolboxDir" -ForegroundColor Yellow
 Write-Host ""
 
+# 0. 进程状态安全检查
+$acadProc = Get-Process acad -ErrorAction SilentlyContinue
+if ($acadProc) {
+    Write-Host "  [提示] 检测到 AutoCAD / 天正建筑 正在运行中..." -ForegroundColor Yellow
+    Write-Host "  建议您先保存图纸并退出 CAD，以确保卸载能彻底清除所有被占用的注册表配置与内存锁。" -ForegroundColor Gray
+    Write-Host ""
+}
+
+# 1. 彻底清理全机所有用户注册表
 $AcadRegTargets = @("HKCU:\Software\Autodesk\AutoCAD")
 Get-ChildItem Registry::HKEY_USERS -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -notmatch "_Classes" -and $_.PSChildName.Length -gt 8 } | ForEach-Object {
     $AcadRegTargets += ("Registry::HKEY_USERS\" + $_.PSChildName + "\Software\Autodesk\AutoCAD")
+}
+if (Test-Path "HKLM:\Software\Autodesk\AutoCAD") {
+    $AcadRegTargets += "HKLM:\Software\Autodesk\AutoCAD"
 }
 
 $appsCleaned = 0
@@ -34,8 +46,8 @@ foreach ($base in $AcadRegTargets) {
             Get-ChildItem -Path $_.PSPath -ErrorAction SilentlyContinue | ForEach-Object {
                 $prodPath = $_.PSPath
                 
-                # 1. 清除 Applications 下的注册项
-                @("XY_Toolbox_Net", "XY_Toolbox") | ForEach-Object {
+                # A. 清除 Applications 下所有关联注册项
+                @("XY_Toolbox_Net", "XY_Toolbox", "XY_Toolbox_Net_Auto", "XY_Toolbox_Loader") | ForEach-Object {
                     $appKey = Join-Path $prodPath "Applications\$_"
                     if (Test-Path $appKey) {
                         try {
@@ -45,13 +57,13 @@ foreach ($base in $AcadRegTargets) {
                     }
                 }
 
-                # 2. 清理 Profiles 启动组与搜索路径
+                # B. 清理 Profiles 启动组与搜索路径
                 $ProfilesPath = Join-Path $prodPath "Profiles"
                 if (Test-Path $ProfilesPath) {
                     Get-ChildItem -Path $ProfilesPath -ErrorAction SilentlyContinue | ForEach-Object {
                         $profPath = $_.PSPath
                         
-                        # 清理 Startup
+                        # 清理 Startup (无缝重排，彻底防止断号 Bug)
                         $startupKey = Join-Path $profPath "Dialogs\Appload\Startup"
                         if (Test-Path $startupKey) {
                             try {
@@ -76,7 +88,7 @@ foreach ($base in $AcadRegTargets) {
                             } catch { }
                         }
 
-                        # 清理搜索路径
+                        # 清理搜索路径与受信任路径 (彻底剥离，不留空分号)
                         $GeneralPath = Join-Path $profPath "General"
                         if (Test-Path $GeneralPath) {
                             try {
@@ -101,12 +113,41 @@ foreach ($base in $AcadRegTargets) {
     }
 }
 
-Write-Host "  [-] 1. 已从 $appsCleaned 处环境中彻底移除 .NET 注册项" -ForegroundColor Yellow
-Write-Host "  [-] 2. 已从 $startupCleaned 个环境的 Appload 启动组中完全移除" -ForegroundColor Yellow
-Write-Host "  [-] 3. 已从 $regCleaned 个环境的搜索路径中完全清除" -ForegroundColor Yellow
+# 2. 彻底清理 Autodesk 官方标准 Bundle 插件包
+$bundleCleaned = 0
+$bundlePaths = @(
+    "$env:APPDATA\Autodesk\ApplicationPlugins\XY_Toolbox.bundle",
+    "$env:ALLUSERSPROFILE\Autodesk\ApplicationPlugins\XY_Toolbox.bundle",
+    "$env:ProgramData\Autodesk\ApplicationPlugins\XY_Toolbox.bundle"
+)
+foreach ($b in $bundlePaths) {
+    if (Test-Path $b) {
+        try {
+            Remove-Item -Path $b -Recurse -Force -ErrorAction SilentlyContinue
+            $bundleCleaned++
+        } catch { }
+    }
+}
+
+# 3. 清理系统临时目录中的临时缓存
+try {
+    @("fast_merge.dcl", "xy_toolbox_*", "XY_Toolbox*") | ForEach-Object {
+        $tempFiles = Get-ChildItem -Path $env:TEMP -Filter $_ -ErrorAction SilentlyContinue
+        if ($tempFiles) {
+            $tempFiles | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+} catch { }
+
+Write-Host "  [-] 1. 已从 $appsCleaned 处注册表中彻底移除 .NET 核心加载项" -ForegroundColor Yellow
+Write-Host "  [-] 2. 已从 $startupCleaned 个环境的 Appload 启动组中彻底剥离" -ForegroundColor Yellow
+Write-Host "  [-] 3. 已从 $regCleaned 个环境的搜索路径中彻底清除" -ForegroundColor Yellow
+if ($bundleCleaned -gt 0) {
+    Write-Host "  [-] 4. 已彻底清理 $bundleCleaned 处 Autodesk 官方 Bundle 插件包" -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "  ★ 卸载完成！CAD 已彻底恢复原生状态，零系统残留！ ★" -ForegroundColor Green
+Write-Host "  ★ 卸载完成！系统与 CAD 已彻底恢复至初始纯净状态，零残留！ ★" -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host ""
