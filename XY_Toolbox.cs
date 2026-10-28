@@ -199,9 +199,21 @@ namespace XY_Deepening_Toolbox
         private const uint WM_CLOSE = 0x0010;
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+        private static PaletteSet _paletteSet = null;
+        private static ToolboxControl _control = null;
+
         public static void CleanupExistingPalettes()
         {
-            ToolboxFloatingForm.HideForm();
+            try
+            {
+                if (_paletteSet != null) _paletteSet.Visible = false;
+            }
+            catch { }
+            try
+            {
+                ToolboxFloatingForm.HideForm();
+            }
+            catch { }
         }
 
         private static bool _lspLoaded = false;
@@ -231,10 +243,11 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("XYREFRESH")]
         public static void ForceReloadPalette()
         {
-            ToolboxFloatingForm.ToggleShow();
+            ShowToolboxPalette();
         }
 
         // 呼出/隐藏 工作台面板 (XGJ / XYGJ / XYSZ / ZYSZ / XYPANEL)
+        // 支持真正吸附侧边栏（左/右侧停靠、自动隐藏）并在异常环境下无缝降级为浮动窗体
         [CommandMethod("XGJ")]
         [CommandMethod("XYGJ")]
         [CommandMethod("XYSZ")]
@@ -242,7 +255,53 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("XYPANEL")]
         public static void ShowToolboxPalette()
         {
-            ToolboxFloatingForm.ToggleShow();
+            try
+            {
+                EnsureLspLoaded();
+
+                if (_paletteSet == null)
+                {
+                    // 核心防崩：不使用导致注册表野指针的旧GUID，使用安全构造
+                    _paletteSet = new PaletteSet("XY工具箱 V1.0");
+                    _paletteSet.Style = PaletteSetStyles.ShowAutoHideButton | 
+                                        PaletteSetStyles.ShowCloseButton |
+                                        PaletteSetStyles.ShowPropertiesMenu;
+                    _paletteSet.MinimumSize = new Size(240, 420);
+                    _paletteSet.Size = new Size(260, 600);
+                    _paletteSet.DockEnabled = DockSides.Right | DockSides.Left;
+
+                    // 默认靠右侧吸附，绝不与天正建筑左侧栏冲突打架
+                    try
+                    {
+                        _paletteSet.Dock = DockSides.Right;
+                    }
+                    catch { }
+
+                    _control = new ToolboxControl();
+                    _paletteSet.Add("XY工具箱", _control);
+                }
+
+                if (!_paletteSet.Visible)
+                {
+                    _paletteSet.Visible = true;
+                }
+                else
+                {
+                    if (_paletteSet.RolledUp)
+                    {
+                        _paletteSet.RolledUp = false;
+                    }
+                    else
+                    {
+                        _paletteSet.Visible = false;
+                    }
+                }
+            }
+            catch
+            {
+                // 若极端环境下 AutoCAD 原生停靠容器报错，无缝自动降级为浮动工作台
+                ToolboxFloatingForm.ToggleShow();
+            }
         }
 
         // 快捷键设置窗口 (SETKEY / KJSZ / CFG)
@@ -4886,19 +4945,28 @@ namespace XY_Deepening_Toolbox
             return false;
         }
 
-        private static bool IsFocusOnTextEditControl()
+        private static bool IsInRealTextEditing()
         {
             try
             {
-                IntPtr focusWnd = GetFocus();
-                if (focusWnd == IntPtr.Zero) return false;
-                System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
-                GetClassName(focusWnd, sb, 256);
-                string cls = sb.ToString().ToLower();
-                if (cls.Contains("edit") || cls.Contains("rich") || cls.Contains("textbox") ||
-                    cls.Contains("scintilla") || cls.Contains("inplace") || cls.Contains("in-place"))
+                // 核心法则：只有正在执行文字编辑命令时，才算文字编辑状态
+                if (IsInTextCommandContext())
                 {
                     return true;
+                }
+
+                // 仅针对真正的多行文字在位编辑控件 (InPlaceTextEditor / RICHEDIT50W)
+                IntPtr focusWnd = GetFocus();
+                if (focusWnd != IntPtr.Zero)
+                {
+                    System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
+                    GetClassName(focusWnd, sb, 256);
+                    string cls = sb.ToString();
+                    if (cls.IndexOf("InPlaceTextEditor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        cls.IndexOf("RICHEDIT50W", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return true;
+                    }
                 }
             }
             catch { }
@@ -5106,7 +5174,7 @@ namespace XY_Deepening_Toolbox
             if (!_enabled) return;
             try
             {
-                if (_isInTextCommand || IsInTextCommandContext() || IsFocusOnTextEditControl())
+                if (_isInTextCommand || IsInRealTextEditing())
                 {
                     return;
                 }
@@ -5137,27 +5205,16 @@ namespace XY_Deepening_Toolbox
                     return;
                 }
 
-                // 1. 检查是否在文字编辑上下文中
-                bool inText = _isInTextCommand || IsInTextCommandContext() || IsFocusOnTextEditControl();
+                // 1. 严格检查是否处于真实文字编辑上下文 (CMDNAMES 正在执行文字命令或多行文字在位编辑)
+                bool inText = _isInTextCommand || IsInRealTextEditing();
                 if (inText)
                 {
                     _isInTextCommand = true;
-                    // 用户在文字编辑时按下了字母键 (A-Z)，若输入法处于英文状态，瞬间切换为中文！
-                    if (e.Message.message == 0x0100) // WM_KEYDOWN
-                    {
-                        int vk = e.Message.wParam.ToInt32();
-                        if (vk >= 0x41 && vk <= 0x5A)
-                        {
-                            if (!IsImeInChineseMode())
-                            {
-                                SetImeChinese();
-                            }
-                        }
-                    }
-                    return; // 坚决不切英文！
+                    return; // 文字编辑中，保留用户当前输入法状态，绝不干涉
                 }
 
-                // 2. 非文字状态（普通绘图/命令行就绪态）：当按下 A-Z 准备执行 CAD 快捷键时，自动保持纯英文
+                // 2. 非文字状态（普通绘图/动态输入/命令行就绪态）：
+                // 当按下 A-Z 准备执行 CAD 快捷键时，100% 保持纯英文，杜绝误转中文拼音！
                 if (e.Message.message == 0x0100)
                 {
                     int vk = e.Message.wParam.ToInt32();
@@ -5224,7 +5281,7 @@ namespace XY_Deepening_Toolbox
         {
             try
             {
-                // 方案 A：优先切换系统纯英文键盘 (en-US)
+                // 方案 A：优先切换系统纯英文键盘 (en-US)，零弹窗、零误转、最纯净
                 if (_enLanguage != null)
                 {
                     ActivateKeyboardLayout(_enLanguage.Handle, KLF_ACTIVATE | KLF_SETFORPROCESS);
@@ -5245,7 +5302,7 @@ namespace XY_Deepening_Toolbox
                         PostMessage(w, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, _enLanguage.Handle);
                     }
 
-                    // 方案 B：通过 WM_IME_CONTROL 关闭输入法开启状态与模式
+                    // 方案 B：通过 WM_IME_CONTROL 关闭输入法开启状态与模式 (置为半角英文)
                     IntPtr imeWnd = ImmGetDefaultIMEWnd(w);
                     if (imeWnd != IntPtr.Zero)
                     {
@@ -5253,26 +5310,14 @@ namespace XY_Deepening_Toolbox
                         SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_SETCONVERSIONMODE, IntPtr.Zero);
                     }
 
-                    // 方案 D：传统 IMM32 上下文关闭
+                    // 方案 C：传统 IMM32 上下文关闭 (彻底关闭搜狗/微软拼音等转换模式)
                     IntPtr hIMC = ImmGetContext(w);
                     if (hIMC != IntPtr.Zero)
                     {
-                        int conv, sent;
-                        if (ImmGetConversionStatus(hIMC, out conv, out sent))
-                        {
-                            conv &= ~IME_CMODE_NATIVE;
-                            ImmSetConversionStatus(hIMC, conv, sent);
-                        }
-                        ImmSetOpenStatus(hIMC, false);
+                        ImmSetConversionStatus(hIMC, 0, 0); // 0 = 纯英文半角模式
+                        ImmSetOpenStatus(hIMC, false);       // 关闭中文输入状态
                         ImmReleaseContext(w, hIMC);
                     }
-                }
-
-                // 方案 C：针对微软拼音，如果仍处于中文模式，模拟 Shift 键穿透切换为英文
-                if (IsImeInChineseMode())
-                {
-                    keybd_event(VK_SHIFT, 0, 0, 0);
-                    keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
                 }
             }
             catch { }
