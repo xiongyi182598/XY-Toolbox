@@ -47,16 +47,15 @@ namespace XY_Toolbox
         public const string GITHUB_REPO_URL = "https://github.com/xiongyi182598/XY-Toolbox";
 
         // 多镜像版本信息地址源（优先国内加速通道）
-        // 多镜像版本信息地址源（全面覆盖国内最稳定的各大加速镜像节点）
+        // 多镜像版本信息地址源（优先无缓存实时镜像与国内极速直连节点）
         private static readonly string[] VersionEndpoints = new string[]
         {
-            "https://raw.gitmirror.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://mirror.ghproxy.com/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://ghproxy.net/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
             "https://cdn.jsdelivr.net/gh/xiongyi182598/XY-Toolbox@main/version.json",
             "https://fastly.jsdelivr.net/gh/xiongyi182598/XY-Toolbox@main/version.json",
-            "https://gcore.jsdelivr.net/gh/xiongyi182598/XY-Toolbox@main/version.json",
-            "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
-            "https://ghproxy.net/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
-            "https://mirror.ghproxy.com/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://raw.gitmirror.com/xiongyi182598/XY-Toolbox/main/version.json",
             "https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json"
         };
 
@@ -154,10 +153,12 @@ namespace XY_Toolbox
         /// </summary>
         private static string HttpGetWithFallback(string url)
         {
+            string fetchUrl = url.Contains("?") ? (url + "&_t=" + DateTime.UtcNow.Ticks) : (url + "?_t=" + DateTime.UtcNow.Ticks);
+
             // 尝试 1：常规请求
             try
             {
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(fetchUrl);
                 req.Timeout = 3000;
                 req.ReadWriteTimeout = 3000;
                 req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) XY_Toolbox_Updater/1.0";
