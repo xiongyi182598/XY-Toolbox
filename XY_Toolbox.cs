@@ -4801,6 +4801,9 @@ namespace XY_Deepening_Toolbox
         private static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         private static extern IntPtr GetKeyboardLayout(uint idThread);
 
         [DllImport("user32.dll")]
@@ -4849,11 +4852,11 @@ namespace XY_Deepening_Toolbox
         private const int IMC_SETCONVERSIONMODE = 0x0002;
         private const int IME_CMODE_NATIVE = 0x0001;
 
-        // 识别所有文字输入编辑相关命令 (包括各种前缀、天正命令、表格命令、属性定义等)
+        // 全面覆盖所有原生文字、标注、天正建筑与海龙文字命令
         private static readonly HashSet<string> TextCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "TEXTEDIT", "TEXT", "DTEXT", "-TEXT", "MTEXT", "-MTEXT", "MTEDIT", "DDEDIT", "ED", "T", "MT", "DT",
-            "ATTEDIT", "EATTEDIT", "-ATTEDIT", "ATTDEF", "-ATTDEF", "DDATTE", "BATTMAN", "FIND",
+            "ATTEDIT", "EATTEDIT", "-ATTEDIT", "ATTDEF", "-ATTDEF", "DDATTE", "BATTMAN", "FIND", "GATTE",
             "QLEADER", "LEADER", "MLEADER", "MLEADEREDIT", "DIMEDIT", "DIMTEDIT", "TEDIT", "TABLEDIT", "TABLE",
             "STYLE", "SPELL", "CHANGETEXT", "SCALETEXT", "JUSTIFYTEXT", "TXT2MTXT", "ARCTEXT", "RTEXT",
             // 天正建筑系列常用文字命令
@@ -4945,26 +4948,35 @@ namespace XY_Deepening_Toolbox
             return false;
         }
 
-        private static bool IsInRealTextEditing()
+        public static bool IsInRealTextEditing()
         {
             try
             {
-                // 核心法则：只有正在执行文字编辑命令时，才算文字编辑状态
-                if (IsInTextCommandContext())
-                {
-                    return true;
-                }
+                if (IsInTextCommandContext()) return true;
 
-                // 仅针对真正的多行文字在位编辑控件 (InPlaceTextEditor / RICHEDIT50W)
                 IntPtr focusWnd = GetFocus();
                 if (focusWnd != IntPtr.Zero)
                 {
                     System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
                     GetClassName(focusWnd, sb, 256);
                     string cls = sb.ToString();
+
                     if (cls.IndexOf("InPlaceTextEditor", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        cls.IndexOf("RICHEDIT50W", StringComparison.OrdinalIgnoreCase) >= 0)
+                        cls.IndexOf("RICHEDIT", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        cls.IndexOf("Edit", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
+                        IntPtr parent = GetParent(focusWnd);
+                        if (parent != IntPtr.Zero)
+                        {
+                            System.Text.StringBuilder pb = new System.Text.StringBuilder(256);
+                            GetClassName(parent, pb, 256);
+                            string pcls = pb.ToString();
+                            if (pcls.IndexOf("CommandLine", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                pcls.IndexOf("CmdLine", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                return false; // 排除命令行输入
+                            }
+                        }
                         return true;
                     }
                 }
@@ -4986,10 +4998,8 @@ namespace XY_Deepening_Toolbox
 
             try
             {
-                // 1. 扫描系统已安装的输入语言
                 DetectInputLanguages();
 
-                // 2. 挂接文档与命令监听
                 DocumentCollection dm = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager;
                 dm.DocumentActivated += (s, e) => { if (e.Document != null) AttachDocument(e.Document); };
                 dm.DocumentCreated += (s, e) => { if (e.Document != null) AttachDocument(e.Document); };
@@ -4999,13 +5009,10 @@ namespace XY_Deepening_Toolbox
                     AttachDocument(dm.MdiActiveDocument);
                 }
 
-                // 3. 挂接空闲守护：确保进入命令行就绪态时自动为纯英文
-                Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnApplicationIdle;
-
-                // 4. 挂接全局按键预处理 (PreTranslateMessage)：精准纠偏
+                // 挂接按键拦截预处理：当处于非文字状态且敲命令按键时智能纠偏为英文
                 Autodesk.AutoCAD.ApplicationServices.Application.PreTranslateMessage += OnPreTranslateMessage;
 
-                // 立即初始化为纯英文
+                // 启动默认置为纯英文盲打状态
                 SetImeEnglish();
             }
             catch { }
@@ -5088,8 +5095,12 @@ namespace XY_Deepening_Toolbox
         private static void OnEnteringQuiescentState(object sender, EventArgs e)
         {
             if (!_enabled) return;
-            _isInTextCommand = false;
-            SetImeEnglish();
+            // 处于命令行静默等待态且无文字命令，确保处于英文模式
+            if (!IsInRealTextEditing())
+            {
+                _isInTextCommand = false;
+                SetImeEnglish();
+            }
         }
 
         private static void OnLispWillStart(object sender, LispWillStartEventArgs e)
@@ -5105,12 +5116,7 @@ namespace XY_Deepening_Toolbox
         private static void OnLispEnded(object sender, EventArgs e)
         {
             if (!_enabled) return;
-            if (IsInTextCommandContext())
-            {
-                _isInTextCommand = true;
-                SetImeChinese();
-            }
-            else
+            if (!IsInRealTextEditing())
             {
                 _isInTextCommand = false;
                 SetImeEnglish();
@@ -5143,7 +5149,7 @@ namespace XY_Deepening_Toolbox
         private static void OnCommandEnded(object sender, CommandEventArgs e)
         {
             if (!_enabled) return;
-            if (IsInTextCommandContext())
+            if (IsInRealTextEditing())
             {
                 _isInTextCommand = true;
                 SetImeChinese();
@@ -5169,29 +5175,6 @@ namespace XY_Deepening_Toolbox
             SetImeEnglish();
         }
 
-        private static void OnApplicationIdle(object sender, EventArgs e)
-        {
-            if (!_enabled) return;
-            try
-            {
-                if (_isInTextCommand || IsInRealTextEditing())
-                {
-                    return;
-                }
-
-                IntPtr fg = GetForegroundWindow();
-                IntPtr acadWnd = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
-                if (fg == acadWnd)
-                {
-                    if (IsImeInChineseMode(acadWnd))
-                    {
-                        SetImeEnglish();
-                    }
-                }
-            }
-            catch { }
-        }
-
         private static void OnPreTranslateMessage(object sender, PreTranslateMessageEventArgs e)
         {
             if (!_enabled) return;
@@ -5205,16 +5188,21 @@ namespace XY_Deepening_Toolbox
                     return;
                 }
 
-                // 1. 严格检查是否处于真实文字编辑上下文 (CMDNAMES 正在执行文字命令或多行文字在位编辑)
+                // 检查是否处于真实文字编辑状态 (多行文字、双击改字、天正文字框等)
                 bool inText = _isInTextCommand || IsInRealTextEditing();
                 if (inText)
                 {
                     _isInTextCommand = true;
-                    return; // 文字编辑中，保留用户当前输入法状态，绝不干涉
+                    // 文字编辑中：确保进入中文输入状态，绝不压制，随心输入汉字
+                    if (!IsImeInChineseMode())
+                    {
+                        SetImeChinese();
+                    }
+                    return;
                 }
 
-                // 2. 非文字状态（普通绘图/动态输入/命令行就绪态）：
-                // 当按下 A-Z 准备执行 CAD 快捷键时，100% 保持纯英文，杜绝误转中文拼音！
+                // 非文字编辑状态（命令与绘图态）：
+                // 当按下 A-Z 准备执行 CAD 快捷键时，确保处于英文半角模式，杜绝误转中文拼音！
                 if (e.Message.message == 0x0100)
                 {
                     int vk = e.Message.wParam.ToInt32();
@@ -5242,12 +5230,12 @@ namespace XY_Deepening_Toolbox
                 }
                 if (hWnd == IntPtr.Zero) return false;
 
-                // 1. 如果当前键盘布局就是独立美式键盘 (en-US 0x04090409)，直接判定为非中文模式
+                // 检查当前键盘布局
                 IntPtr hkl = GetKeyboardLayout(0);
                 long hklVal = hkl.ToInt64() & 0xFFFFFFFF;
                 if (hklVal == 0x04090409) return false;
 
-                // 2. 检查 IME 默认窗口状态 (兼容搜狗输入法/微软拼音等)
+                // 检查 IME 默认窗口状态
                 IntPtr imeWnd = ImmGetDefaultIMEWnd(hWnd);
                 if (imeWnd != IntPtr.Zero)
                 {
@@ -5259,7 +5247,7 @@ namespace XY_Deepening_Toolbox
                     }
                 }
 
-                // 3. 检查传统 IMM 上下文
+                // 检查传统 IMM 上下文
                 IntPtr hIMC = ImmGetContext(hWnd);
                 if (hIMC != IntPtr.Zero)
                 {
@@ -5281,13 +5269,6 @@ namespace XY_Deepening_Toolbox
         {
             try
             {
-                // 方案 A：优先切换系统纯英文键盘 (en-US)，零弹窗、零误转、最纯净
-                if (_enLanguage != null)
-                {
-                    ActivateKeyboardLayout(_enLanguage.Handle, KLF_ACTIVATE | KLF_SETFORPROCESS);
-                    try { InputLanguage.CurrentInputLanguage = _enLanguage; } catch { }
-                }
-
                 IntPtr focusWnd = GetFocus();
                 IntPtr fgWnd = GetForegroundWindow();
                 IntPtr acadWnd = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
@@ -5297,12 +5278,7 @@ namespace XY_Deepening_Toolbox
                 {
                     if (w == IntPtr.Zero) continue;
 
-                    if (_enLanguage != null)
-                    {
-                        PostMessage(w, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, _enLanguage.Handle);
-                    }
-
-                    // 方案 B：通过 WM_IME_CONTROL 关闭输入法开启状态与模式 (置为半角英文)
+                    // 1. 发送 WM_IME_CONTROL 置为英文半角模式
                     IntPtr imeWnd = ImmGetDefaultIMEWnd(w);
                     if (imeWnd != IntPtr.Zero)
                     {
@@ -5310,7 +5286,7 @@ namespace XY_Deepening_Toolbox
                         SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_SETCONVERSIONMODE, IntPtr.Zero);
                     }
 
-                    // 方案 C：传统 IMM32 上下文关闭 (彻底关闭搜狗/微软拼音等转换模式)
+                    // 2. 传统 IMM32 上下文关闭中文转换 (搜狗/微软拼音等)
                     IntPtr hIMC = ImmGetContext(w);
                     if (hIMC != IntPtr.Zero)
                     {
@@ -5327,8 +5303,10 @@ namespace XY_Deepening_Toolbox
         {
             try
             {
-                // 方案 A：优先切回中文键盘 (zh-CN)
-                if (_zhLanguage != null)
+                // 1. 如果当前处于纯英文美式键盘 (en-US)，优先切回中文输入法
+                IntPtr hkl = GetKeyboardLayout(0);
+                long hklVal = hkl.ToInt64() & 0xFFFFFFFF;
+                if (hklVal == 0x04090409 && _zhLanguage != null)
                 {
                     ActivateKeyboardLayout(_zhLanguage.Handle, KLF_ACTIVATE | KLF_SETFORPROCESS);
                     try { InputLanguage.CurrentInputLanguage = _zhLanguage; } catch { }
@@ -5369,7 +5347,7 @@ namespace XY_Deepening_Toolbox
                     }
                 }
 
-                // 针对微软拼音：如果当前处于英文模式，模拟 Shift 键瞬间切回中文
+                // 2. 针对微软拼音：如果依然处于英文状态，模拟极速 Shift 切换为中文
                 if (!IsImeInChineseMode())
                 {
                     keybd_event(VK_SHIFT, 0, 0, 0);
