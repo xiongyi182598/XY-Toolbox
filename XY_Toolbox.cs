@@ -172,9 +172,11 @@ namespace XY_Deepening_Toolbox
             return null;
         }
 
-        private static PaletteSet _paletteSet = null;
-        private static ToolboxControl _control = null;
-        private const string PALETTE_GLOBAL_KEY = "XY_TOOLBOX_PALETTE_GLOBAL_KEY";
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
 
         [DllImport("user32.dll")]
         private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -199,33 +201,29 @@ namespace XY_Deepening_Toolbox
 
         public static void CleanupExistingPalettes()
         {
-            try
-            {
-                if (_paletteSet != null)
-                {
-                    try { _paletteSet.Visible = false; } catch { }
-                }
-            }
-            catch { }
+            ToolboxFloatingForm.HideForm();
         }
 
+        private static bool _lspLoaded = false;
         public static void EnsureLspLoaded()
         {
             try
             {
+                if (_lspLoaded) return;
                 Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                 if (doc != null)
                 {
                     string lspPath = FindToolboxFile("autoload.lsp").Replace('\\', '/');
-                    string cmd = string.Format("(progn (vl-load-com) (if (null c:fast_merge_quick) (if (findfile \"{0}\") (load \"{0}\") (if (findfile \"autoload.lsp\") (load (findfile \"autoload.lsp\"))))) (if apply_all_toolbox_shortcuts (apply_all_toolbox_shortcuts)) (princ)) ", lspPath);
-                    doc.SendStringToExecute(cmd, true, false, false);
+                    if (System.IO.File.Exists(lspPath))
+                    {
+                        string cmd = string.Format("(progn (vl-load-com) (if (null c:fast_merge_quick) (load \"{0}\")) (princ)) ", lspPath);
+                        doc.SendStringToExecute(cmd, true, false, false);
+                    }
+                    _lspLoaded = true;
                 }
             }
             catch { }
         }
-
-        // 固定稳定 GUID，用于永久记忆用户的停靠位置、宽度、停靠边与折叠偏好
-        private static readonly Guid ToolboxPaletteGuid = new Guid("B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E");
 
         // 强制刷新并重建工作台面板
         [CommandMethod("XY_UPDATE_PANEL")]
@@ -233,16 +231,7 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("XYREFRESH")]
         public static void ForceReloadPalette()
         {
-            try
-            {
-                if (_paletteSet != null)
-                {
-                    if (!_paletteSet.Visible) _paletteSet.Visible = true;
-                    return;
-                }
-                ShowToolboxPalette();
-            }
-            catch { }
+            ToolboxFloatingForm.ToggleShow();
         }
 
         // 呼出/隐藏 工作台面板 (XGJ / XYGJ / XYSZ / ZYSZ / XYPANEL)
@@ -253,58 +242,7 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("XYPANEL")]
         public static void ShowToolboxPalette()
         {
-            try
-            {
-                EnsureLspLoaded();
-
-                if (_paletteSet == null)
-                {
-                    _paletteSet = new PaletteSet("XY工具箱 V1.0", ToolboxPaletteGuid);
-                    _paletteSet.Style = PaletteSetStyles.ShowAutoHideButton | 
-                                        PaletteSetStyles.ShowCloseButton;
-                    _paletteSet.MinimumSize = new Size(250, 420);
-                    _paletteSet.Size = new Size(270, 560);
-                    _paletteSet.DockEnabled = DockSides.Left | DockSides.Right;
-
-                    try
-                    {
-                        string icoPath = GetAppIconPath();
-                        if (!string.IsNullOrEmpty(icoPath))
-                        {
-                            _paletteSet.Icon = new Icon(icoPath);
-                        }
-                    }
-                    catch { }
-
-                    _control = new ToolboxControl();
-                    _paletteSet.Add("XY工具箱", _control);
-                }
-
-                if (!_paletteSet.Visible)
-                {
-                    _paletteSet.Visible = true;
-                }
-                else
-                {
-                    try
-                    {
-                        if (_paletteSet.RolledUp)
-                        {
-                            _paletteSet.RolledUp = false;
-                        }
-                    }
-                    catch { }
-                }
-
-                if (_control != null)
-                {
-                    _control.RefreshLayerList();
-                }
-        }
-            catch (System.Exception ex)
-            {
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowAlertDialog("呼出XY工具箱失败:\n" + ex.Message);
-            }
+            ToolboxFloatingForm.ToggleShow();
         }
 
         // 快捷键设置窗口 (SETKEY / KJSZ / CFG)
@@ -1690,11 +1628,12 @@ namespace XY_Deepening_Toolbox
         {
             try
             {
-                if (_control != null && !_control.IsDisposed && _control.Created)
+                ToolboxFloatingForm tf = ToolboxFloatingForm.Instance;
+                if (tf != null && !tf.IsDisposed && tf.Created)
                 {
-                    _control.BeginInvoke(new Action(() =>
+                    tf.BeginInvoke(new Action(() =>
                     {
-                        try { _control.Invalidate(true); _control.Update(); } catch { }
+                        try { tf.Invalidate(true); tf.Update(); } catch { }
                     }));
                 }
             }
@@ -4182,7 +4121,7 @@ namespace XY_Deepening_Toolbox
             lblTitle.Font = new Font("SimSun", 9F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
             lblTitle.Location = new Point(34, 7);
-            lblTitle.Size = new Size(180, 18);
+            lblTitle.Size = new Size(95, 18);
             lblTitle.UseCompatibleTextRendering = true;
             pnlHeader.Controls.Add(lblTitle);
 
@@ -4190,13 +4129,67 @@ namespace XY_Deepening_Toolbox
             lblUpdate.Text = "检查更新";
             lblUpdate.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
             lblUpdate.ForeColor = Color.FromArgb(100, 180, 240);
-            lblUpdate.Location = new Point(140, 7);
-            lblUpdate.Size = new Size(70, 18);
+            lblUpdate.Location = new Point(132, 7);
+            lblUpdate.Size = new Size(58, 18);
             lblUpdate.Cursor = Cursors.Hand;
             lblUpdate.UseCompatibleTextRendering = true;
             toolTipHelp.SetToolTip(lblUpdate, "点击在线检测新版本 (快捷键: XGX)");
             lblUpdate.Click += (s, e) => XY_Toolbox.UpdateService.CheckForUpdates(false);
             pnlHeader.Controls.Add(lblUpdate);
+
+            Label btnMini = new Label();
+            btnMini.Text = "─";
+            btnMini.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
+            btnMini.ForeColor = Color.FromArgb(160, 170, 185);
+            btnMini.Location = new Point(205, 5);
+            btnMini.Size = new Size(22, 20);
+            btnMini.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnMini.TextAlign = ContentAlignment.MiddleCenter;
+            btnMini.Cursor = Cursors.Hand;
+            toolTipHelp.SetToolTip(btnMini, "折叠 / 展开工作台面板 (或双击标题栏)");
+            btnMini.MouseEnter += (s, e) => { btnMini.ForeColor = Color.White; };
+            btnMini.MouseLeave += (s, e) => { btnMini.ForeColor = Color.FromArgb(160, 170, 185); };
+            btnMini.Click += (s, e) => {
+                ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
+                if (tf != null) tf.ToggleMiniMode();
+            };
+            pnlHeader.Controls.Add(btnMini);
+
+            Label btnClose = new Label();
+            btnClose.Text = "✕";
+            btnClose.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
+            btnClose.ForeColor = Color.FromArgb(160, 170, 185);
+            btnClose.Location = new Point(230, 5);
+            btnClose.Size = new Size(22, 20);
+            btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnClose.TextAlign = ContentAlignment.MiddleCenter;
+            btnClose.Cursor = Cursors.Hand;
+            toolTipHelp.SetToolTip(btnClose, "关闭工作台 (快捷键 XGJ 随时重新呼出)");
+            btnClose.MouseEnter += (s, e) => { btnClose.ForeColor = Color.FromArgb(240, 80, 80); };
+            btnClose.MouseLeave += (s, e) => { btnClose.ForeColor = Color.FromArgb(160, 170, 185); };
+            btnClose.Click += (s, e) => {
+                if (this.ParentForm != null) this.ParentForm.Hide();
+            };
+            pnlHeader.Controls.Add(btnClose);
+
+            // 绑定鼠标左键按住拖动窗口与双击折叠
+            MouseEventHandler handleDrag = (s, e) => {
+                if (e.Button == MouseButtons.Left && this.ParentForm != null)
+                {
+                    Commands.ReleaseCapture();
+                    Commands.SendMessage(this.ParentForm.Handle, 0xA1, 0x2, 0);
+                }
+            };
+            pnlHeader.MouseDown += handleDrag;
+            lblTitle.MouseDown += handleDrag;
+            picLogo.MouseDown += handleDrag;
+
+            EventHandler handleDblClick = (s, e) => {
+                ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
+                if (tf != null) tf.ToggleMiniMode();
+            };
+            pnlHeader.DoubleClick += handleDblClick;
+            lblTitle.DoubleClick += handleDblClick;
 
             this.Controls.Add(pnlHeader);
 
@@ -4503,7 +4496,161 @@ namespace XY_Deepening_Toolbox
             catch { }
         }
     }
-public class AttributeTextMoveJig : DrawJig
+
+    public class ToolboxFloatingForm : Form
+    {
+        private static ToolboxFloatingForm _instance = null;
+        private ToolboxControl _control = null;
+        private bool _isMiniMode = false;
+        private int _expandedHeight = 620;
+        private const int MINI_HEIGHT = 30;
+
+        public static ToolboxFloatingForm Instance
+        {
+            get { return _instance; }
+        }
+
+        public ToolboxFloatingForm()
+        {
+            this.FormBorderStyle = FormBorderStyle.None;
+            this.ShowInTaskbar = false;
+            this.StartPosition = FormStartPosition.Manual;
+            this.BackColor = Color.FromArgb(18, 20, 25);
+            this.Width = 260;
+            this.Height = _expandedHeight;
+            this.MinimumSize = new Size(240, MINI_HEIGHT);
+            this.DoubleBuffered = true;
+
+            InitPosition();
+
+            _control = new ToolboxControl();
+            _control.Dock = DockStyle.Fill;
+            this.Controls.Add(_control);
+
+            this.Paint += (s, e) => {
+                using (Pen p = new Pen(Color.FromArgb(56, 64, 78)))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
+                }
+            };
+        }
+
+        private void InitPosition()
+        {
+            try
+            {
+                System.Windows.Forms.Screen screen = System.Windows.Forms.Screen.PrimaryScreen;
+                int defaultX = 260;
+                int defaultY = 160;
+
+                if (screen != null)
+                {
+                    // 默认停靠在主屏幕右侧区域，绝不遮挡天正占据的左侧屏幕
+                    defaultX = screen.WorkingArea.Right - this.Width - 25;
+                    defaultY = screen.WorkingArea.Top + 140;
+
+                    if (defaultX + this.Width > screen.WorkingArea.Right)
+                        defaultX = screen.WorkingArea.Right - this.Width - 10;
+                    if (defaultX < screen.WorkingArea.Left)
+                        defaultX = screen.WorkingArea.Left + 10;
+                    if (defaultY + this.Height > screen.WorkingArea.Bottom)
+                        defaultY = screen.WorkingArea.Bottom - this.Height - 10;
+                    if (defaultY < screen.WorkingArea.Top)
+                        defaultY = screen.WorkingArea.Top + 10;
+                }
+
+                this.Location = new Point(defaultX, defaultY);
+            }
+            catch { }
+        }
+
+        public void ToggleMiniMode()
+        {
+            if (_isMiniMode)
+            {
+                this.Height = _expandedHeight;
+                _isMiniMode = false;
+            }
+            else
+            {
+                if (this.Height > MINI_HEIGHT) _expandedHeight = this.Height;
+                this.Height = MINI_HEIGHT;
+                _isMiniMode = true;
+            }
+            this.Invalidate();
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                this.Hide();
+                return true;
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        public static void ShowForm()
+        {
+            try
+            {
+                EnsureInstance();
+                if (_instance.WindowState == FormWindowState.Minimized)
+                    _instance.WindowState = FormWindowState.Normal;
+                _instance.Show();
+                _instance.BringToFront();
+            }
+            catch { }
+        }
+
+        public static void ToggleShow()
+        {
+            try
+            {
+                EnsureInstance();
+                if (_instance.Visible)
+                {
+                    _instance.Hide();
+                }
+                else
+                {
+                    if (_instance.WindowState == FormWindowState.Minimized)
+                        _instance.WindowState = FormWindowState.Normal;
+                    _instance.Show();
+                    _instance.BringToFront();
+                    _instance.Activate();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowAlertDialog("呼出XY工具箱失败:\n" + ex.Message);
+            }
+        }
+
+        private static void EnsureInstance()
+        {
+            Commands.EnsureLspLoaded();
+            if (_instance == null || _instance.IsDisposed)
+            {
+                _instance = new ToolboxFloatingForm();
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(null, _instance, false);
+            }
+        }
+
+        public static void HideForm()
+        {
+            try
+            {
+                if (_instance != null && !_instance.IsDisposed)
+                {
+                    _instance.Hide();
+                }
+            }
+            catch { }
+        }
+    }
+
+    public class AttributeTextMoveJig : DrawJig
     {
         private Point3d _basePoint;
         private Point3d _currentPoint;
