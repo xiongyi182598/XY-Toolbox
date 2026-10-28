@@ -281,6 +281,12 @@ namespace XY_Deepening_Toolbox
                     _paletteSet.Add("XY工具箱 v" + UpdateService.CURRENT_VERSION, _control);
                 }
 
+                _paletteSet.Text = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
+                if (_paletteSet.Count > 0)
+                {
+                    _paletteSet[0].Name = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
+                }
+
                 if (!_paletteSet.Visible)
                 {
                     _paletteSet.Visible = true;
