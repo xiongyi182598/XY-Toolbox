@@ -2000,19 +2000,16 @@ namespace XY_Deepening_Toolbox
 
     public class ShortcutConfigDialog : Form
     {
-        private TextBox txtMergeQuick;
-        private TextBox txtMerge;
-        private TextBox txtFreezeDeep;
-        private TextBox txtBlockZero;
-        private TextBox txtMoveText;
-        private TextBox txtDetect;
-        private TextBox txtPanel;
-        private TextBox txtIme;
-        private Button btnSave;
-        private Button btnNotepad;
-        private Button btnDefault;
-        private Button btnCancel;
+        private class ShortcutItem
+        {
+            public string Key;
+            public string Title;
+            public string SubTitle;
+            public string DefaultVal;
+            public TextBox InputBox;
+        }
 
+        private List<ShortcutItem> _items = new List<ShortcutItem>();
         private string _iniPath = "";
 
         public ShortcutConfigDialog()
@@ -2028,200 +2025,241 @@ namespace XY_Deepening_Toolbox
 
         private void InitializeDialog()
         {
-            this.Text = "自定义快捷键设置 - XY工具箱 V1.0";
-            this.Size = new Size(460, 590);
+            this.Text = "自定义快捷键定制中心 - XY工具箱";
+            this.Size = new Size(560, 680);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.ShowInTaskbar = false;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = Color.FromArgb(248, 250, 252);
-            this.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            this.BackColor = Color.FromArgb(24, 27, 34);
+            this.ForeColor = Color.White;
+            this.Font = new Font("SimSun", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
-            int leftLabel = 20;
-            int leftBox = 250;
-            int boxWidth = 170;
-            int top = 16;
-            int step = 42;
+            // 1. 顶部 Header
+            Panel pnlHeader = new Panel();
+            pnlHeader.Dock = DockStyle.Top;
+            pnlHeader.Height = 46;
+            pnlHeader.BackColor = Color.FromArgb(18, 20, 26);
 
-            Label lblHeader = new Label();
-            lblHeader.Text = "★ 快捷键定制 (支持多个别名，用逗号隔开)";
-            lblHeader.Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
-            lblHeader.ForeColor = Color.FromArgb(30, 41, 59);
-            lblHeader.Location = new Point(leftLabel, top);
-            lblHeader.Size = new Size(390, 22);
-            this.Controls.Add(lblHeader);
-            top += 30;
+            Label lblTitle = new Label();
+            lblTitle.Text = "★ 快捷键定制中心 (与左侧工作台面板 100% 同步对齐)";
+            lblTitle.Font = new Font("SimSun", 9.5F, FontStyle.Bold);
+            lblTitle.ForeColor = Color.FromArgb(255, 215, 0); // 金色
+            lblTitle.Location = new Point(16, 8);
+            lblTitle.AutoSize = true;
+            pnlHeader.Controls.Add(lblTitle);
 
-            // 1. 图层极速合并 (免弹窗)
-            Label l1 = new Label();
-            l1.Text = "1. 图层极速合并 (免弹窗):\r\n   (点选源图层和目标层直接合并)";
-            l1.Location = new Point(leftLabel, top);
-            l1.Size = new Size(220, 36);
-            this.Controls.Add(l1);
-            txtMergeQuick = new TextBox();
-            txtMergeQuick.Location = new Point(leftBox, top + 4);
-            txtMergeQuick.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtMergeQuick);
-            top += step;
+            Label lblSub = new Label();
+            lblSub.Text = "提示: 支持设置多个别名，用英文逗号隔开 (例如: XJH, HB1)。修改后即刻生效！";
+            lblSub.Font = new Font("SimSun", 8F);
+            lblSub.ForeColor = Color.FromArgb(150, 160, 175);
+            lblSub.Location = new Point(17, 26);
+            lblSub.AutoSize = true;
+            pnlHeader.Controls.Add(lblSub);
 
-            // 2. 图层合并 (面板选择版)
-            Label l2 = new Label();
-            l2.Text = "2. 图层合并 (面板选择版):\r\n   (呼出合并配置面板执行)";
-            l2.Location = new Point(leftLabel, top);
-            l2.Size = new Size(220, 36);
-            this.Controls.Add(l2);
-            txtMerge = new TextBox();
-            txtMerge.Location = new Point(leftBox, top + 4);
-            txtMerge.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtMerge);
-            top += step;
+            this.Controls.Add(pnlHeader);
 
-            // 3. 图层穿透冻结 (视口/全局)
-            Label lFreeze = new Label();
-            lFreeze.Text = "3. 穿透点取冻结图层:\r\n   (穿透图块内子对象/视口及全局冻结)";
-            lFreeze.Location = new Point(leftLabel, top);
-            lFreeze.Size = new Size(220, 36);
-            this.Controls.Add(lFreeze);
-            txtFreezeDeep = new TextBox();
-            txtFreezeDeep.Location = new Point(leftBox, top + 4);
-            txtFreezeDeep.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtFreezeDeep);
-            top += step;
+            // 2. 底部固定按钮区
+            Panel pnlBottom = new Panel();
+            pnlBottom.Dock = DockStyle.Bottom;
+            pnlBottom.Height = 56;
+            pnlBottom.BackColor = Color.FromArgb(18, 20, 26);
 
-            // 4. 图块深度归0层
-            Label l3 = new Label();
-            l3.Text = "4. 图块一键深度归0层:\r\n   (穿透多层嵌套块/随层颜色)";
-            l3.Location = new Point(leftLabel, top);
-            l3.Size = new Size(220, 36);
-            this.Controls.Add(l3);
-            txtBlockZero = new TextBox();
-            txtBlockZero.Location = new Point(leftBox, top + 4);
-            txtBlockZero.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtBlockZero);
-            top += step;
-
-            // 5. 属性块文字同步平移
-            Label l4 = new Label();
-            l4.Text = "5. 属性块文字同步平移:\r\n   (全图同名块同标签文字平移)";
-            l4.Location = new Point(leftLabel, top);
-            l4.Size = new Size(220, 36);
-            this.Controls.Add(l4);
-            txtMoveText = new TextBox();
-            txtMoveText.Location = new Point(leftBox, top + 4);
-            txtMoveText.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtMoveText);
-            top += step;
-
-            // 6. 底层图元属性探测
-            Label l5 = new Label();
-            l5.Text = "6. 底层图元属性探测:\r\n   (穿透嵌套块/视口探测真实层)";
-            l5.Location = new Point(leftLabel, top);
-            l5.Size = new Size(220, 36);
-            this.Controls.Add(l5);
-            txtDetect = new TextBox();
-            txtDetect.Location = new Point(leftBox, top + 4);
-            txtDetect.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtDetect);
-            top += step;
-
-            // 7. 提资面板呼出
-            Label l6 = new Label();
-            l6.Text = "7. 提资设置面板呼出:\r\n   (打开侧边栏可视化控制面板)";
-            l6.Location = new Point(leftLabel, top);
-            l6.Size = new Size(220, 36);
-            this.Controls.Add(l6);
-            txtPanel = new TextBox();
-            txtPanel.Location = new Point(leftBox, top + 4);
-            txtPanel.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtPanel);
-            top += step;
-
-            // 8. 输入法智能切换
-            Label l7 = new Label();
-            l7.Text = "8. 输入法智能切换:\r\n   (画图全自动英文/文字全自动中文)";
-            l7.Location = new Point(leftLabel, top);
-            l7.Size = new Size(220, 36);
-            this.Controls.Add(l7);
-            txtIme = new TextBox();
-            txtIme.Location = new Point(leftBox, top + 4);
-            txtIme.Size = new Size(boxWidth, 24);
-            this.Controls.Add(txtIme);
-            top += 46;
-
-            // 按钮区域
-            btnSave = new Button();
+            Button btnSave = new Button();
             btnSave.Text = "★ 保存并立即生效";
-            btnSave.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
-            btnSave.BackColor = Color.FromArgb(37, 99, 235);
+            btnSave.Font = new Font("SimSun", 9F, FontStyle.Bold);
+            btnSave.Size = new Size(150, 34);
+            btnSave.Location = new Point(16, 11);
+            btnSave.BackColor = Color.FromArgb(0, 122, 204);
             btnSave.ForeColor = Color.White;
             btnSave.FlatStyle = FlatStyle.Flat;
             btnSave.FlatAppearance.BorderSize = 0;
-            btnSave.Location = new Point(20, top);
-            btnSave.Size = new Size(195, 34);
+            btnSave.Cursor = Cursors.Hand;
             btnSave.Click += BtnSave_Click;
-            this.Controls.Add(btnSave);
+            pnlBottom.Controls.Add(btnSave);
 
-            btnNotepad = new Button();
-            btnNotepad.Text = "📝 记事本编辑";
-            btnNotepad.Font = new Font("Microsoft YaHei UI", 8.5F);
-            btnNotepad.Location = new Point(225, top);
-            btnNotepad.Size = new Size(195, 34);
-            btnNotepad.Click += BtnNotepad_Click;
-            this.Controls.Add(btnNotepad);
-            top += 42;
-
-            btnDefault = new Button();
+            Button btnDefault = new Button();
             btnDefault.Text = "恢复默认快捷键";
-            btnDefault.Font = new Font("Microsoft YaHei UI", 8.5F);
-            btnDefault.Location = new Point(20, top);
-            btnDefault.Size = new Size(195, 30);
+            btnDefault.Size = new Size(125, 34);
+            btnDefault.Location = new Point(176, 11);
+            btnDefault.BackColor = Color.FromArgb(45, 52, 65);
+            btnDefault.ForeColor = Color.FromArgb(220, 225, 235);
+            btnDefault.FlatStyle = FlatStyle.Flat;
+            btnDefault.FlatAppearance.BorderSize = 0;
+            btnDefault.Cursor = Cursors.Hand;
             btnDefault.Click += BtnDefault_Click;
-            this.Controls.Add(btnDefault);
+            pnlBottom.Controls.Add(btnDefault);
 
-            btnCancel = new Button();
+            Button btnNotepad = new Button();
+            btnNotepad.Text = "记事本编辑";
+            btnNotepad.Size = new Size(95, 34);
+            btnNotepad.Location = new Point(311, 11);
+            btnNotepad.BackColor = Color.FromArgb(40, 45, 56);
+            btnNotepad.ForeColor = Color.FromArgb(200, 205, 215);
+            btnNotepad.FlatStyle = FlatStyle.Flat;
+            btnNotepad.FlatAppearance.BorderSize = 0;
+            btnNotepad.Cursor = Cursors.Hand;
+            btnNotepad.Click += BtnNotepad_Click;
+            pnlBottom.Controls.Add(btnNotepad);
+
+            Button btnCancel = new Button();
             btnCancel.Text = "取消关闭";
-            btnCancel.Font = new Font("Microsoft YaHei UI", 8.5F);
-            btnCancel.Location = new Point(225, top);
-            btnCancel.Size = new Size(195, 30);
+            btnCancel.Size = new Size(85, 34);
+            btnCancel.Location = new Point(416, 11);
+            btnCancel.BackColor = Color.FromArgb(35, 40, 50);
+            btnCancel.ForeColor = Color.FromArgb(170, 175, 185);
+            btnCancel.FlatStyle = FlatStyle.Flat;
+            btnCancel.FlatAppearance.BorderSize = 0;
+            btnCancel.Cursor = Cursors.Hand;
             btnCancel.Click += (s, e) => this.Close();
-            this.Controls.Add(btnCancel);
+            pnlBottom.Controls.Add(btnCancel);
+
+            this.Controls.Add(pnlBottom);
+
+            // 3. 中间可滚动卡片列表
+            Panel pnlScroll = new Panel();
+            pnlScroll.Dock = DockStyle.Fill;
+            pnlScroll.AutoScroll = true;
+            pnlScroll.BackColor = Color.FromArgb(24, 27, 34);
+            this.Controls.Add(pnlScroll);
+            pnlScroll.BringToFront();
+
+            int top = 12;
+
+            // 分组 1: 图层工具 (8项)
+            AddSectionHeader(pnlScroll, ref top, "▼ 【图层工具】 (共 8 项核心功能)", Color.FromArgb(100, 200, 255));
+            AddItem(pnlScroll, ref top, "CMD_MERGE_QUICK", "1. 极速合层 (免弹窗直选)", "(连续点击源图元与目标图元秒级合并)", "XJH, HB1");
+            AddItem(pnlScroll, ref top, "CMD_MERGE", "2. 图层合并 (高级面板版)", "(弹出独立可视化面板：前缀规范/洗层/继承)", "XHB, HB2");
+            AddItem(pnlScroll, ref top, "CMD_VP_OVERRIDE", "3. 视口图层 (视口样式覆盖)", "(当前布局视口颜色/线型局部覆盖与快速置灰)", "SK, SKYS");
+            AddItem(pnlScroll, ref top, "CMD_FREEZE_DEEP", "4. 穿透冻结 (深度冻结图层)", "(穿透图块点选即时冻结图层，支持敲U撤销)", "XDJ, XDK, XDF");
+            AddItem(pnlScroll, ref top, "CMD_FREEZE_THAW", "5. 逐步解冻 (单步倒退恢复)", "(连续回车逐级倒退解冻图层，不干扰绘图)", "XJD");
+            AddItem(pnlScroll, ref top, "CMD_LAYER_PURGE", "6. 清理空层 (秒级移除冗余)", "(0.05秒极速物理安全移除全部未使用空图层)", "XQTC");
+            AddItem(pnlScroll, ref top, "CMD_DETECT", "7. 图元探测 (穿透信息查看)", "(穿透多重复杂嵌套图块，直接探测深层图层与文字)", "XTC");
+            AddItem(pnlScroll, ref top, "CMD_LAYER_COMPARE", "8. 图层对比 (引用比对合并)", "(自动比对图层线型颜色，智能评分并一键合并)", "LYCOMPARE");
+
+            top += 6;
+            // 分组 2: 图块工具 (5项)
+            AddSectionHeader(pnlScroll, ref top, "▼ 【图块工具】 (共 5 项核心功能)", Color.FromArgb(255, 180, 80));
+            AddItem(pnlScroll, ref top, "CMD_BLOCK_ERASE", "9. 穿透删除 (免炸开删图元)", "(穿透删除块内线条，按 M 键切换【联动】或【独占】)", "KSC, XSC, BDE");
+            AddItem(pnlScroll, ref top, "CMD_FIX_TEXT", "10. 翻正反字 (智能纠正反字)", "(大面积框选穿透原位纠偏镜像文字，几何中心不移位)", "FZW, XFZ");
+            AddItem(pnlScroll, ref top, "CMD_BLOCK_STRETCH", "11. 原位编块 (免在位拉伸平移)", "(外部框选块内线条静默S拉伸或M平移，无感修改)", "XKB, XLS");
+            AddItem(pnlScroll, ref top, "CMD_MOVE_TEXT", "12. 属性平移 (单字动态微调)", "(动态Jig拖拽微调属性文字，模型与视口全联动)", "XSY, MW, MY");
+            AddItem(pnlScroll, ref top, "CMD_BLOCK_ZERO", "13. 图块归零 (深度归至0层)", "(穿透各级嵌套块，强制将内部全部图元深度归入0层)", "XGL, B0");
+
+            top += 6;
+            // 分组 3: 系统与设置 (4项)
+            AddSectionHeader(pnlScroll, ref top, "▼ 【系统与辅助】 (共 4 项核心功能)", Color.FromArgb(120, 240, 150));
+            AddItem(pnlScroll, ref top, "CMD_PANEL", "14. 工作台面板呼出", "(打开/置顶左侧快捷悬浮侧边栏工作台)", "XGJ, XYGJ");
+            AddItem(pnlScroll, ref top, "CMD_IME", "15. 输入法中英文智能切换", "(绘图命令全自动英文盲打，编辑文字自动切中文)", "XSR, XSRF, IME");
+            AddItem(pnlScroll, ref top, "CMD_UPDATE", "16. 商业级在线检测更新", "(智能检测云端最新版本并一键极速在线升级)", "XGX, UPDATE");
+            AddItem(pnlScroll, ref top, "CMD_RELOAD", "17. 程序一秒级热重载", "(无需重启 AutoCAD，秒级热重载最新核心与快捷键)", "XCZ");
+
+            top += 16;
+        }
+
+        private void AddSectionHeader(Control parent, ref int top, string title, Color color)
+        {
+            Panel pnlSec = new Panel();
+            pnlSec.Location = new Point(14, top);
+            pnlSec.Size = new Size(514, 28);
+            pnlSec.BackColor = Color.FromArgb(32, 37, 48);
+
+            Label lbl = new Label();
+            lbl.Text = title;
+            lbl.Font = new Font("SimSun", 9F, FontStyle.Bold);
+            lbl.ForeColor = color;
+            lbl.Location = new Point(10, 6);
+            lbl.AutoSize = true;
+            pnlSec.Controls.Add(lbl);
+
+            parent.Controls.Add(pnlSec);
+            top += 34;
+        }
+
+        private void AddItem(Control parent, ref int top, string key, string title, string subTitle, string defaultVal)
+        {
+            Panel card = new Panel();
+            card.Location = new Point(14, top);
+            card.Size = new Size(514, 52);
+            card.BackColor = Color.FromArgb(28, 32, 42);
+            card.BorderStyle = BorderStyle.FixedSingle;
+
+            // 主标题 (加粗，白色)
+            Label lblMain = new Label();
+            lblMain.Text = title;
+            lblMain.Font = new Font("SimSun", 9.5F, FontStyle.Bold);
+            lblMain.ForeColor = Color.FromArgb(240, 245, 255);
+            lblMain.Location = new Point(10, 6);
+            lblMain.Size = new Size(295, 18);
+            card.Controls.Add(lblMain);
+
+            // 副标题说明 (8pt，浅灰，垂直留白不压字)
+            Label lblSub = new Label();
+            lblSub.Text = subTitle;
+            lblSub.Font = new Font("SimSun", 8F);
+            lblSub.ForeColor = Color.FromArgb(140, 150, 165);
+            lblSub.Location = new Point(11, 28);
+            lblSub.Size = new Size(295, 16);
+            card.Controls.Add(lblSub);
+
+            // 右侧输入框 (加宽至 190，聚焦青蓝)
+            TextBox txt = new TextBox();
+            txt.Text = defaultVal;
+            txt.Font = new Font("Consolas", 9.5F, FontStyle.Regular);
+            txt.BackColor = Color.FromArgb(18, 20, 26);
+            txt.ForeColor = Color.FromArgb(100, 210, 255);
+            txt.Location = new Point(312, 13);
+            txt.Size = new Size(190, 24);
+            txt.BorderStyle = BorderStyle.FixedSingle;
+            card.Controls.Add(txt);
+
+            ShortcutItem item = new ShortcutItem
+            {
+                Key = key,
+                Title = title,
+                SubTitle = subTitle,
+                DefaultVal = defaultVal,
+                InputBox = txt
+            };
+            _items.Add(item);
+
+            parent.Controls.Add(card);
+            top += 58;
         }
 
         private void LoadConfig()
         {
-            _iniPath = GetIniPath();
-            Dictionary<string, string> cfg = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            if (File.Exists(_iniPath))
+            try
             {
-                try
+                _iniPath = GetIniPath();
+                if (!File.Exists(_iniPath)) return;
+
+                string[] lines = File.ReadAllLines(_iniPath, System.Text.Encoding.GetEncoding("gb18030"));
+                Dictionary<string, string> dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (string raw in lines)
                 {
-                    string[] lines = File.ReadAllLines(_iniPath);
-                    foreach (string rawLine in lines)
+                    string l = raw.Trim();
+                    if (string.IsNullOrEmpty(l) || l.StartsWith(";") || l.StartsWith("#") || l.StartsWith("[")) continue;
+                    int eq = l.IndexOf('=');
+                    if (eq > 0)
                     {
-                        string line = rawLine.Trim();
-                        if (string.IsNullOrEmpty(line) || line.StartsWith(";") || line.StartsWith("[")) continue;
-                        int idx = line.IndexOf('=');
-                        if (idx > 0)
-                        {
-                            string k = line.Substring(0, idx).Trim();
-                            string v = line.Substring(idx + 1).Trim();
-                            cfg[k] = v;
-                        }
+                        string k = l.Substring(0, eq).Trim();
+                        string v = l.Substring(eq + 1).Trim();
+                        dict[k] = v;
                     }
                 }
-                catch { }
-            }
 
-            txtMergeQuick.Text = cfg.ContainsKey("CMD_MERGE_QUICK") ? cfg["CMD_MERGE_QUICK"] : "XJH, HB1";
-            txtMerge.Text = cfg.ContainsKey("CMD_MERGE") ? cfg["CMD_MERGE"] : "XHB, HB2";
-            txtFreezeDeep.Text = cfg.ContainsKey("CMD_FREEZE_DEEP") ? cfg["CMD_FREEZE_DEEP"] : "XDJ, XDK, XDF";
-            txtBlockZero.Text = cfg.ContainsKey("CMD_BLOCK_ZERO") ? cfg["CMD_BLOCK_ZERO"] : "XGL";
-            txtMoveText.Text = cfg.ContainsKey("CMD_MOVE_TEXT") ? cfg["CMD_MOVE_TEXT"] : "XSY";
-            txtDetect.Text = cfg.ContainsKey("CMD_DETECT") ? cfg["CMD_DETECT"] : "XTC";
-            txtPanel.Text = cfg.ContainsKey("CMD_PANEL") ? cfg["CMD_PANEL"] : "XGJ";
-            txtIme.Text = cfg.ContainsKey("CMD_IME") ? cfg["CMD_IME"] : "XSR, XSRF, IME";
+                foreach (ShortcutItem item in _items)
+                {
+                    if (dict.ContainsKey(item.Key))
+                    {
+                        item.InputBox.Text = dict[item.Key];
+                    }
+                }
+            }
+            catch { }
         }
 
         private void BtnSave_Click(object sender, EventArgs e)
@@ -2231,48 +2269,112 @@ namespace XY_Deepening_Toolbox
                 _iniPath = GetIniPath();
                 List<string> lines = new List<string>();
                 lines.Add("; ========================================================");
-                lines.Add("; XY工具箱 V1.0 - 快捷键配置文件 (shortcuts.ini)");
-                lines.Add("; 支持逗号隔开多个别名，修改后输入 REKEY 即可立即刷新生效");
-                lines.Add("; 命名规范：严格遵循 X前缀 + 精简拼音首字母组合");
+                lines.Add("; XY工具箱 - 快捷键配置文件 (shortcuts.ini)");
+                lines.Add("; 格式: CMD_XXX=别名1, 别名2");
                 lines.Add("; ========================================================");
-                lines.Add("");
                 lines.Add("[Shortcuts]");
-                lines.Add("CMD_MERGE_QUICK=" + txtMergeQuick.Text.Trim());
-                lines.Add("CMD_MERGE=" + txtMerge.Text.Trim());
-                lines.Add("CMD_FREEZE_DEEP=" + txtFreezeDeep.Text.Trim());
-                lines.Add("CMD_BLOCK_ZERO=" + txtBlockZero.Text.Trim());
-                lines.Add("CMD_MOVE_TEXT=" + txtMoveText.Text.Trim());
-                lines.Add("CMD_DETECT=" + txtDetect.Text.Trim());
-                lines.Add("CMD_PANEL=" + txtPanel.Text.Trim());
-                lines.Add("CMD_IME=" + txtIme.Text.Trim());
+
+                foreach (ShortcutItem item in _items)
+                {
+                    lines.Add(item.Key + "=" + item.InputBox.Text.Trim());
+                }
                 lines.Add("ENABLE_00_LEGACY=0");
 
-                File.WriteAllLines(_iniPath, lines.ToArray(), System.Text.Encoding.UTF8);
+                File.WriteAllLines(_iniPath, lines.ToArray(), System.Text.Encoding.GetEncoding("gb18030"));
 
-                // 发送命令使 AutoLISP 立即热重载快捷键
+                // 重新生成 shortcuts.lsp 映射并热重载
+                UpdateShortcutsLsp();
+
                 Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                 if (doc != null)
                 {
-                    doc.SendStringToExecute("(apply_all_toolbox_shortcuts) ", true, false, false);
+                    doc.SendStringToExecute("(c:REKEY) ", true, false, false);
                 }
 
-                MessageBox.Show("★ 快捷键设置已成功保存并立即生效！\n\n" + 
-                                "图层极速合并: " + txtMergeQuick.Text + "\n" + 
-                                "图层面板合并: " + txtMerge.Text + "\n" + 
-                                "穿透图层冻结: " + txtFreezeDeep.Text + "\n" + 
-                                "图块归0层: " + txtBlockZero.Text + "\n" + 
-                                "文字平移: " + txtMoveText.Text + "\n" + 
-                                "图元探测: " + txtDetect.Text + "\n" + 
-                                "工具箱面板: " + txtPanel.Text + "\n" +
-                                "输入法切换: " + txtIme.Text, 
-                                "设置生效", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
+                MessageBox.Show("★ 全套 17 项快捷键已成功保存并立即生效！\n您设置的新快捷键已可直接在 CAD 中使用。", 
+                                "快捷键配置保存成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.Close();
             }
             catch (System.Exception ex)
             {
                 MessageBox.Show("保存快捷键失败: " + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void UpdateShortcutsLsp()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_iniPath);
+                string lspPath = Path.Combine(dir, "shortcuts.lsp");
+
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                sb.AppendLine(";; ========================================================");
+                sb.AppendLine(";; XY工具箱 - 快捷键直通映射 (shortcuts.lsp 由配置面板自动生成)");
+                sb.AppendLine(";; 编码: ANSI / GBK (兼容全版本 AutoCAD)");
+                sb.AppendLine(";; ========================================================");
+                sb.AppendLine("(vl-load-com)");
+
+                Dictionary<string, string> cmdTargets = new Dictionary<string, string>
+                {
+                    { "CMD_MERGE_QUICK", "c:fast_merge_quick" },
+                    { "CMD_MERGE", "c:fast_merge" },
+                    { "CMD_VP_OVERRIDE", "_.SK" },
+                    { "CMD_FREEZE_DEEP", "XDJ" },
+                    { "CMD_FREEZE_THAW", "XJD" },
+                    { "CMD_LAYER_PURGE", "XQTC" },
+                    { "CMD_DETECT", "c:DETECT_ENTITY" },
+                    { "CMD_LAYER_COMPARE", "LYCOMPARE" },
+                    { "CMD_BLOCK_ERASE", "c:XY_BLOCK_ERASE" },
+                    { "CMD_FIX_TEXT", "FZW" },
+                    { "CMD_BLOCK_STRETCH", "XSTRETCH" },
+                    { "CMD_MOVE_TEXT", "c:UNIVERSAL_MOVE_TEXT" },
+                    { "CMD_BLOCK_ZERO", "c:BLOCK_LAYER_ZERO" },
+                    { "CMD_PANEL", "c:XYSZ" },
+                    { "CMD_IME", "XSR" },
+                    { "CMD_UPDATE", "_.XGX" },
+                    { "CMD_RELOAD", "c:RELOAD" }
+                };
+
+                foreach (ShortcutItem item in _items)
+                {
+                    if (cmdTargets.ContainsKey(item.Key))
+                    {
+                        string target = cmdTargets[item.Key];
+                        string[] aliases = item.InputBox.Text.Split(new char[] { ',', '，', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (string a in aliases)
+                        {
+                            string alias = a.Trim();
+                            if (string.IsNullOrEmpty(alias)) continue;
+                            if (target.StartsWith("c:"))
+                            {
+                                sb.AppendLine(string.Format("(defun c:{0} () ({1}))", alias, target));
+                            }
+                            else if (target.StartsWith("_."))
+                            {
+                                sb.AppendLine(string.Format("(defun c:{0} () (vl-cmdf \"{1}\"))", alias, target));
+                            }
+                            else
+                            {
+                                sb.AppendLine(string.Format("(defun c:{0} () (vl-cmdf \"{1}\"))", alias, target));
+                            }
+                        }
+                    }
+                }
+
+                sb.AppendLine(@"(defun c:REKEY () (c:rekey))
+(defun c:rekey ( / sc )
+  (setq sc (findfile ""shortcuts.lsp""))
+  (if (and sc (findfile sc)) (load sc))
+  (princ ""\n[XY工具箱] 快捷键全套已刷新生效！\n"")
+  (princ)
+)
+(princ)
+");
+
+                File.WriteAllText(lspPath, sb.ToString(), System.Text.Encoding.GetEncoding("gb18030"));
+            }
+            catch { }
         }
 
         private void BtnNotepad_Click(object sender, EventArgs e)
@@ -2295,14 +2397,10 @@ namespace XY_Deepening_Toolbox
 
         private void BtnDefault_Click(object sender, EventArgs e)
         {
-            txtMergeQuick.Text = "XJH, HB1";
-            txtMerge.Text = "XHB, HB2";
-            txtFreezeDeep.Text = "XDJ, XDK, XDF";
-            txtBlockZero.Text = "XGL";
-            txtMoveText.Text = "XSY";
-            txtDetect.Text = "XTC";
-            txtPanel.Text = "XGJ";
-            txtIme.Text = "XSR, XSRF, IME";
+            foreach (ShortcutItem item in _items)
+            {
+                item.InputBox.Text = item.DefaultVal;
+            }
         }
     }
 
