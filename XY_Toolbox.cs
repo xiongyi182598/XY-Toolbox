@@ -46,7 +46,7 @@ namespace XY_Deepening_Toolbox
                 {
                     Editor ed = doc.Editor;
                     ed.WriteMessage("\n========================================================");
-                    ed.WriteMessage("\n★ [XY工具箱 V1.0] 已成功装载！工作台已在侧边栏自动就绪。");
+                    ed.WriteMessage("\n★ [XY工具箱 v" + UpdateService.CURRENT_VERSION + "] 已成功装载！工作台已在侧边栏自动就绪。");
                     ed.WriteMessage("\n  1. 敲 XGJ  : 呼出 / 隐藏 XY工具箱侧边栏工作台");
                     ed.WriteMessage("\n  2. 敲 XHB  : 弹出图层合并器可视化面板 (HB2)");
                     ed.WriteMessage("\n  3. 敲 XJH  : 极速图层合并 (HB1 免弹窗点选合并，零黑屏)");
@@ -262,7 +262,7 @@ namespace XY_Deepening_Toolbox
                 if (_paletteSet == null)
                 {
                     // 核心防崩：不使用导致注册表野指针的旧GUID，使用安全构造
-                    _paletteSet = new PaletteSet("XY工具箱 V1.0");
+                    _paletteSet = new PaletteSet("XY工具箱 v" + UpdateService.CURRENT_VERSION);
                     _paletteSet.Style = PaletteSetStyles.ShowAutoHideButton | 
                                         PaletteSetStyles.ShowCloseButton |
                                         PaletteSetStyles.ShowPropertiesMenu;
@@ -4176,7 +4176,7 @@ namespace XY_Deepening_Toolbox
             pnlHeader.Controls.Add(picLogo);
 
             Label lblTitle = new Label();
-            lblTitle.Text = "XY工具箱 V1.0";
+            lblTitle.Text = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
             lblTitle.Font = new Font("SimSun", 9F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
             lblTitle.Location = new Point(34, 7);
