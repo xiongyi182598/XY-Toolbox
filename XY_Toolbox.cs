@@ -278,7 +278,7 @@ namespace XY_Deepening_Toolbox
                     catch { }
 
                     _control = new ToolboxControl();
-                    _paletteSet.Add("XY工具箱", _control);
+                    _paletteSet.Add("XY工具箱 v" + UpdateService.CURRENT_VERSION, _control);
                 }
 
                 if (!_paletteSet.Visible)
@@ -4179,8 +4179,8 @@ namespace XY_Deepening_Toolbox
             lblTitle.Text = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
             lblTitle.Font = new Font("SimSun", 9F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(34, 7);
-            lblTitle.Size = new Size(95, 18);
+            lblTitle.Location = new Point(32, 7);
+            lblTitle.AutoSize = true;
             lblTitle.UseCompatibleTextRendering = true;
             pnlHeader.Controls.Add(lblTitle);
 
@@ -4188,8 +4188,8 @@ namespace XY_Deepening_Toolbox
             lblUpdate.Text = "检查更新";
             lblUpdate.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
             lblUpdate.ForeColor = Color.FromArgb(100, 180, 240);
-            lblUpdate.Location = new Point(132, 7);
-            lblUpdate.Size = new Size(58, 18);
+            lblUpdate.AutoSize = true;
+            lblUpdate.Location = new Point(lblTitle.Right + 8, 7);
             lblUpdate.Cursor = Cursors.Hand;
             lblUpdate.UseCompatibleTextRendering = true;
             toolTipHelp.SetToolTip(lblUpdate, "点击在线检测新版本 (快捷键: XGX)");
