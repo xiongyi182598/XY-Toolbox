@@ -25,7 +25,7 @@ if os.path.exists(ver_json):
     try:
         with open(ver_json, "r", encoding="utf-8") as f:
             data = json.load(f)
-            version = data.get("Version", version)
+            version = data.get("version", data.get("Version", "1.0.2"))
     except Exception as e:
         print("[!] 读取版本号提示:", e)
 
