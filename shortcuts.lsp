@@ -20,6 +20,14 @@
 (defun c:HB2 () (c:fast_merge))
 (defun c:hb2 () (c:fast_merge))
 
+;; 2.1 智能图层对比与翻图系统 (XTC / XYCOMPARE) & 一键套用翻图 (XFT / HBL)
+(defun c:XTC () (vl-cmdf "_.XTC"))
+(defun c:xtc () (vl-cmdf "_.XTC"))
+(defun c:XFT () (vl-cmdf "_.XFT"))
+(defun c:xft () (vl-cmdf "_.XFT"))
+(defun c:HBL () (vl-cmdf "_.HBL"))
+(defun c:hbl () (vl-cmdf "_.HBL"))
+
 ;; 3. 极速点选合并指令 (免弹窗)
 (defun c:XJH () (c:fast_merge_quick))
 (defun c:xjh () (c:fast_merge_quick))

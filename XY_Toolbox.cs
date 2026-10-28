@@ -357,9 +357,10 @@ namespace XY_Deepening_Toolbox
             return null;
         }
 
-        // 图层深度对比与智能合并系统 (LYCOMPARE / TCH_COMPARE / XYCOMPARE / LYC)
+        // 图层深度对比与智能合并系统 (LYCOMPARE / TCH_COMPARE / XYCOMPARE / LYC / XTC)
         [CommandMethod("XYCOMPARE")]
         [CommandMethod("LYC")]
+        [CommandMethod("XTC")]
         [CommandMethod("LYCOMPARE")]
         [CommandMethod("TCH_COMPARE")]
         public static void ShowLayerCompareDialog()
@@ -377,6 +378,35 @@ namespace XY_Deepening_Toolbox
                 {
                     doc.Editor.WriteMessage("\n[错误] LYCOMPARE 呼出失败: " + ex.Message);
                 }
+            }
+        }
+
+        // ========================================================
+        // 极速套用上次方案一键翻图 (XFT / HBL / FLIPNOW / QUICKFLIP)
+        // 纯内存级无黑屏秒级套用上次规则，支持图层合并、同名块重定义与视口继承
+        // ========================================================
+        [CommandMethod("XFT")]
+        [CommandMethod("HBL")]
+        [CommandMethod("FLIPNOW")]
+        [CommandMethod("QUICKFLIP")]
+        public static void QuickFlipLastPresetCommand()
+        {
+            EnsureLspLoaded();
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            try
+            {
+                using (doc.LockDocument())
+                {
+                    MergeReport report = LayerDeepMergeService.QuickApplyLastPreset(doc.Database);
+                    ed.WriteMessage("\n" + report.SummaryMessage + "\n");
+                    doc.Editor.UpdateScreen();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                if (ed != null) ed.WriteMessage("\n[错误] 一键翻图执行异常: " + ex.Message + "\n");
             }
         }
 

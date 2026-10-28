@@ -6,6 +6,7 @@ using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using System.Web.Script.Serialization;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -18,6 +19,10 @@ namespace XY_Deepening_Toolbox
         // 核心数据模型
         private List<LayerInfo> _currentLayers = new List<LayerInfo>();
         private List<LayerInfo> _refLayers = new List<LayerInfo>();
+        private List<BlockMatchInfo> _currentBlocks = new List<BlockMatchInfo>();
+        private List<BlockMatchInfo> _refBlocks = new List<BlockMatchInfo>();
+        private List<BlockMatchInfo> _blockMatches = new List<BlockMatchInfo>();
+
         private List<LayerMatchResult> _allMatches = new List<LayerMatchResult>();
         private List<LayerMatchResult> _displayMatches = new List<LayerMatchResult>();
 
@@ -30,6 +35,13 @@ namespace XY_Deepening_Toolbox
         private Label lblHeaderSubtitle;
 
         private Panel pnlToolbar;
+        private Button btnLoadLastPreset;
+        private Button btnQuickFlipNow;
+        private Button btnReverseInfer;
+        private Button btnSavePreset;
+        private Button btnLoadPreset;
+
+        private Panel pnlFilterBar;
         private Button btnPurgeUnused;
         private RadioButton rbShowAll;
         private RadioButton rbShowActiveOnly;
@@ -52,12 +64,12 @@ namespace XY_Deepening_Toolbox
         private DataGridViewTextBoxColumn colTarLt;
 
         private Panel pnlBottom;
+        private CheckBox chkRedefineBlocks;
         private CheckBox chkMigrateVp;
         private CheckBox chkDeepBlock;
         private CheckBox chkPurgeSource;
         private CheckBox chkResetByLayer;
         private Label lblStatus;
-        private ProgressBar progressBar;
         private Button btnNormalizeProps;
         private Button btnExecuteMerge;
         private Button btnExportReport;
@@ -72,9 +84,9 @@ namespace XY_Deepening_Toolbox
 
         private void InitializeComponent()
         {
-            this.Text = "图层与线型规范深度对比与智能合并系统 - XY工具箱";
-            this.Size = new Size(1160, 720);
-            this.MinimumSize = new Size(980, 600);
+            this.Text = "图层与图块规范深度对比与智能翻图系统 - XY工具箱";
+            this.Size = new Size(1180, 740);
+            this.MinimumSize = new Size(1000, 620);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(30, 34, 42);
             this.ForeColor = Color.FromArgb(220, 225, 232);
@@ -85,103 +97,103 @@ namespace XY_Deepening_Toolbox
             // ==========================================
             pnlHeader = new Panel();
             pnlHeader.Dock = DockStyle.Top;
-            pnlHeader.Height = 54;
+            pnlHeader.Height = 50;
             pnlHeader.BackColor = Color.FromArgb(24, 27, 34);
-            pnlHeader.Padding = new Padding(16, 8, 16, 8);
+            pnlHeader.Padding = new Padding(16, 6, 16, 6);
 
             lblHeaderTitle = new Label();
-            lblHeaderTitle.Text = "🔬 图层与线型规范深度对比与智能合并系统";
+            lblHeaderTitle.Text = "🔬 图层与图块规范深度对比 · 智能批量翻图系统";
             lblHeaderTitle.Font = new Font("Microsoft YaHei UI", 11.5F, FontStyle.Bold);
             lblHeaderTitle.ForeColor = Color.White;
-            lblHeaderTitle.Location = new Point(14, 6);
-            lblHeaderTitle.Size = new Size(500, 24);
+            lblHeaderTitle.Location = new Point(14, 5);
+            lblHeaderTitle.Size = new Size(520, 22);
             pnlHeader.Controls.Add(lblHeaderTitle);
 
             lblHeaderSubtitle = new Label();
-            lblHeaderSubtitle.Text = "支持外部参考标准DWG比对 · 语义智能匹配 · 视口穿透无损合并 · 未使用图层物理安全瘦身";
+            lblHeaderSubtitle.Text = "HB1/HB2 属性与视口无损继承 · 同名图块最高优先级合并 · 历史记忆一键秒翻 · 双图逆向反推规则";
             lblHeaderSubtitle.Font = new Font("Microsoft YaHei UI", 8.5F);
             lblHeaderSubtitle.ForeColor = Color.FromArgb(145, 155, 170);
-            lblHeaderSubtitle.Location = new Point(16, 31);
-            lblHeaderSubtitle.Size = new Size(700, 18);
+            lblHeaderSubtitle.Location = new Point(16, 28);
+            lblHeaderSubtitle.Size = new Size(720, 16);
             pnlHeader.Controls.Add(lblHeaderSubtitle);
 
             this.Controls.Add(pnlHeader);
 
             // ==========================================
-            // 2. 核心工具栏 (维度 1 物理清理 + 维度 2 动态过滤)
+            // 2. 快捷翻图与记忆操作栏 (Toolbar Row 1)
             // ==========================================
             pnlToolbar = new Panel();
             pnlToolbar.Dock = DockStyle.Top;
-            pnlToolbar.Height = 46;
+            pnlToolbar.Height = 42;
             pnlToolbar.BackColor = Color.FromArgb(34, 39, 49);
-            pnlToolbar.Padding = new Padding(12, 6, 12, 6);
+            pnlToolbar.Padding = new Padding(12, 5, 12, 5);
 
-            // 【维度 1: 物理一键清理】
-            btnPurgeUnused = new Button();
-            btnPurgeUnused.Text = "🧹 一键移除未使用空图层";
-            btnPurgeUnused.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
-            btnPurgeUnused.BackColor = Color.FromArgb(35, 134, 54); // 经典 GitHub/VSCode 绿色高亮
-            btnPurgeUnused.ForeColor = Color.White;
-            btnPurgeUnused.FlatStyle = FlatStyle.Flat;
-            btnPurgeUnused.FlatAppearance.BorderSize = 0;
-            btnPurgeUnused.Location = new Point(12, 8);
-            btnPurgeUnused.Size = new Size(185, 30);
-            btnPurgeUnused.Cursor = Cursors.Hand;
-            btnPurgeUnused.Click += BtnPurgeUnused_Click;
-            pnlToolbar.Controls.Add(btnPurgeUnused);
+            btnLoadLastPreset = new Button();
+            btnLoadLastPreset.Text = "📋 载入上次翻图记忆";
+            btnLoadLastPreset.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            btnLoadLastPreset.BackColor = Color.FromArgb(50, 60, 78);
+            btnLoadLastPreset.ForeColor = Color.FromArgb(120, 215, 255);
+            btnLoadLastPreset.FlatStyle = FlatStyle.Flat;
+            btnLoadLastPreset.FlatAppearance.BorderColor = Color.FromArgb(70, 130, 180);
+            btnLoadLastPreset.Location = new Point(12, 6);
+            btnLoadLastPreset.Size = new Size(160, 30);
+            btnLoadLastPreset.Cursor = Cursors.Hand;
+            btnLoadLastPreset.Click += BtnLoadLastPreset_Click;
+            pnlToolbar.Controls.Add(btnLoadLastPreset);
 
-            // 【维度 2: 视觉动态过滤】
-            rbShowAll = new RadioButton();
-            rbShowAll.Text = "显示全部图层";
-            rbShowAll.Checked = true;
-            rbShowAll.Location = new Point(215, 12);
-            rbShowAll.Size = new Size(110, 22);
-            rbShowAll.ForeColor = Color.FromArgb(230, 235, 245);
-            rbShowAll.CheckedChanged += (s, e) => { if (rbShowAll.Checked) ApplyFilter(); };
-            pnlToolbar.Controls.Add(rbShowAll);
+            btnQuickFlipNow = new Button();
+            btnQuickFlipNow.Text = "⚡ 一键套用并执行翻图";
+            btnQuickFlipNow.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            btnQuickFlipNow.BackColor = Color.FromArgb(40, 110, 60);
+            btnQuickFlipNow.ForeColor = Color.FromArgb(140, 255, 170);
+            btnQuickFlipNow.FlatStyle = FlatStyle.Flat;
+            btnQuickFlipNow.FlatAppearance.BorderColor = Color.FromArgb(60, 160, 90);
+            btnQuickFlipNow.Location = new Point(180, 6);
+            btnQuickFlipNow.Size = new Size(165, 30);
+            btnQuickFlipNow.Cursor = Cursors.Hand;
+            btnQuickFlipNow.Click += BtnQuickFlipNow_Click;
+            pnlToolbar.Controls.Add(btnQuickFlipNow);
 
-            rbShowActiveOnly = new RadioButton();
-            rbShowActiveOnly.Text = "仅显示在用图层 (隐藏空图层)";
-            rbShowActiveOnly.Location = new Point(330, 12);
-            rbShowActiveOnly.Size = new Size(195, 22);
-            rbShowActiveOnly.ForeColor = Color.FromArgb(97, 175, 239);
-            rbShowActiveOnly.CheckedChanged += (s, e) => { if (rbShowActiveOnly.Checked) ApplyFilter(); };
-            pnlToolbar.Controls.Add(rbShowActiveOnly);
+            btnReverseInfer = new Button();
+            btnReverseInfer.Text = "🔍 双图逆向分析 (反推提取规则)";
+            btnReverseInfer.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            btnReverseInfer.BackColor = Color.FromArgb(85, 55, 120);
+            btnReverseInfer.ForeColor = Color.FromArgb(235, 195, 255);
+            btnReverseInfer.FlatStyle = FlatStyle.Flat;
+            btnReverseInfer.FlatAppearance.BorderColor = Color.FromArgb(140, 90, 200);
+            btnReverseInfer.Location = new Point(352, 6);
+            btnReverseInfer.Size = new Size(215, 30);
+            btnReverseInfer.Cursor = Cursors.Hand;
+            btnReverseInfer.Click += BtnReverseInfer_Click;
+            pnlToolbar.Controls.Add(btnReverseInfer);
 
-            // 搜索过滤框
-            Label lblSearch = new Label();
-            lblSearch.Text = "🔍";
-            lblSearch.Location = new Point(535, 14);
-            lblSearch.Size = new Size(24, 20);
-            lblSearch.ForeColor = Color.Gray;
-            pnlToolbar.Controls.Add(lblSearch);
+            btnSavePreset = new Button();
+            btnSavePreset.Text = "💾 保存方案";
+            btnSavePreset.Location = new Point(575, 6);
+            btnSavePreset.Size = new Size(95, 30);
+            btnSavePreset.BackColor = Color.FromArgb(48, 54, 66);
+            btnSavePreset.ForeColor = Color.White;
+            btnSavePreset.FlatStyle = FlatStyle.Flat;
+            btnSavePreset.FlatAppearance.BorderSize = 0;
+            btnSavePreset.Cursor = Cursors.Hand;
+            btnSavePreset.Click += BtnSavePreset_Click;
+            pnlToolbar.Controls.Add(btnSavePreset);
 
-            txtSearch = new TextBox();
-            txtSearch.Location = new Point(560, 11);
-            txtSearch.Size = new Size(130, 23);
-            txtSearch.BackColor = Color.FromArgb(24, 27, 34);
-            txtSearch.ForeColor = Color.White;
-            txtSearch.BorderStyle = BorderStyle.FixedSingle;
-            txtSearch.TextChanged += (s, e) => ApplyFilter();
-            pnlToolbar.Controls.Add(txtSearch);
-
-            // 右侧参考文件载入按钮
-            btnBrowseLin = new Button();
-            btnBrowseLin.Text = "📄 载入.LIN线型库";
-            btnBrowseLin.Location = new Point(pnlToolbar.Width - 145, 8);
-            btnBrowseLin.Size = new Size(135, 30);
-            btnBrowseLin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnBrowseLin.BackColor = Color.FromArgb(48, 54, 66);
-            btnBrowseLin.ForeColor = Color.FromArgb(220, 225, 235);
-            btnBrowseLin.FlatStyle = FlatStyle.Flat;
-            btnBrowseLin.FlatAppearance.BorderSize = 0;
-            btnBrowseLin.Cursor = Cursors.Hand;
-            btnBrowseLin.Click += BtnBrowseLin_Click;
-            pnlToolbar.Controls.Add(btnBrowseLin);
+            btnLoadPreset = new Button();
+            btnLoadPreset.Text = "📂 载入方案";
+            btnLoadPreset.Location = new Point(676, 6);
+            btnLoadPreset.Size = new Size(95, 30);
+            btnLoadPreset.BackColor = Color.FromArgb(48, 54, 66);
+            btnLoadPreset.ForeColor = Color.White;
+            btnLoadPreset.FlatStyle = FlatStyle.Flat;
+            btnLoadPreset.FlatAppearance.BorderSize = 0;
+            btnLoadPreset.Cursor = Cursors.Hand;
+            btnLoadPreset.Click += BtnLoadPreset_Click;
+            pnlToolbar.Controls.Add(btnLoadPreset);
 
             btnBrowseRefDwg = new Button();
             btnBrowseRefDwg.Text = "📁 选择参考标准DWG";
-            btnBrowseRefDwg.Location = new Point(pnlToolbar.Width - 315, 8);
+            btnBrowseRefDwg.Location = new Point(pnlToolbar.Width - 175, 6);
             btnBrowseRefDwg.Size = new Size(160, 30);
             btnBrowseRefDwg.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnBrowseRefDwg.BackColor = Color.FromArgb(14, 99, 156);
@@ -192,118 +204,171 @@ namespace XY_Deepening_Toolbox
             btnBrowseRefDwg.Click += BtnBrowseRefDwg_Click;
             pnlToolbar.Controls.Add(btnBrowseRefDwg);
 
-            lblRefFileStatus = new Label();
-            lblRefFileStatus.Text = "未载入参考DWG (点击右侧按钮选择标准样板)";
-            lblRefFileStatus.ForeColor = Color.FromArgb(150, 160, 175);
-            lblRefFileStatus.Location = new Point(pnlToolbar.Width - 640, 14);
-            lblRefFileStatus.Size = new Size(310, 20);
-            lblRefFileStatus.TextAlign = ContentAlignment.MiddleRight;
-            lblRefFileStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            pnlToolbar.Controls.Add(lblRefFileStatus);
-
             this.Controls.Add(pnlToolbar);
 
             // ==========================================
-            // 3. 底部配置与操作栏
+            // 3. 过滤与瘦身栏 (Toolbar Row 2)
+            // ==========================================
+            pnlFilterBar = new Panel();
+            pnlFilterBar.Dock = DockStyle.Top;
+            pnlFilterBar.Height = 40;
+            pnlFilterBar.BackColor = Color.FromArgb(28, 32, 40);
+            pnlFilterBar.Padding = new Padding(12, 4, 12, 4);
+
+            btnPurgeUnused = new Button();
+            btnPurgeUnused.Text = "🧹 一键移除未使用空图层";
+            btnPurgeUnused.Font = new Font("Microsoft YaHei UI", 9F);
+            btnPurgeUnused.BackColor = Color.FromArgb(35, 120, 60);
+            btnPurgeUnused.ForeColor = Color.White;
+            btnPurgeUnused.FlatStyle = FlatStyle.Flat;
+            btnPurgeUnused.FlatAppearance.BorderSize = 0;
+            btnPurgeUnused.Location = new Point(12, 5);
+            btnPurgeUnused.Size = new Size(165, 28);
+            btnPurgeUnused.Cursor = Cursors.Hand;
+            btnPurgeUnused.Click += BtnPurgeUnused_Click;
+            pnlFilterBar.Controls.Add(btnPurgeUnused);
+
+            rbShowAll = new RadioButton();
+            rbShowAll.Text = "显示全部图层";
+            rbShowAll.Checked = true;
+            rbShowAll.Location = new Point(190, 8);
+            rbShowAll.Size = new Size(110, 22);
+            rbShowAll.ForeColor = Color.FromArgb(230, 235, 245);
+            rbShowAll.CheckedChanged += (s, e) => { if (rbShowAll.Checked) ApplyFilter(); };
+            pnlFilterBar.Controls.Add(rbShowAll);
+
+            rbShowActiveOnly = new RadioButton();
+            rbShowActiveOnly.Text = "仅显示在用图层 (隐藏空图层)";
+            rbShowActiveOnly.Location = new Point(305, 8);
+            rbShowActiveOnly.Size = new Size(195, 22);
+            rbShowActiveOnly.ForeColor = Color.FromArgb(97, 175, 239);
+            rbShowActiveOnly.CheckedChanged += (s, e) => { if (rbShowActiveOnly.Checked) ApplyFilter(); };
+            pnlFilterBar.Controls.Add(rbShowActiveOnly);
+
+            Label lblSearch = new Label();
+            lblSearch.Text = "🔍";
+            lblSearch.Location = new Point(510, 10);
+            lblSearch.Size = new Size(24, 20);
+            lblSearch.ForeColor = Color.Gray;
+            pnlFilterBar.Controls.Add(lblSearch);
+
+            txtSearch = new TextBox();
+            txtSearch.Location = new Point(535, 7);
+            txtSearch.Size = new Size(130, 23);
+            txtSearch.BackColor = Color.FromArgb(20, 23, 29);
+            txtSearch.ForeColor = Color.White;
+            txtSearch.BorderStyle = BorderStyle.FixedSingle;
+            txtSearch.TextChanged += (s, e) => ApplyFilter();
+            pnlFilterBar.Controls.Add(txtSearch);
+
+            btnBrowseLin = new Button();
+            btnBrowseLin.Text = "📄 载入.LIN线型";
+            btnBrowseLin.Location = new Point(pnlFilterBar.Width - 140, 5);
+            btnBrowseLin.Size = new Size(125, 28);
+            btnBrowseLin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnBrowseLin.BackColor = Color.FromArgb(48, 54, 66);
+            btnBrowseLin.ForeColor = Color.FromArgb(220, 225, 235);
+            btnBrowseLin.FlatStyle = FlatStyle.Flat;
+            btnBrowseLin.FlatAppearance.BorderSize = 0;
+            btnBrowseLin.Cursor = Cursors.Hand;
+            btnBrowseLin.Click += BtnBrowseLin_Click;
+            pnlFilterBar.Controls.Add(btnBrowseLin);
+
+            lblRefFileStatus = new Label();
+            lblRefFileStatus.Text = "未载入参考DWG";
+            lblRefFileStatus.ForeColor = Color.FromArgb(150, 160, 175);
+            lblRefFileStatus.Location = new Point(pnlFilterBar.Width - 460, 9);
+            lblRefFileStatus.Size = new Size(310, 20);
+            lblRefFileStatus.TextAlign = ContentAlignment.MiddleRight;
+            lblRefFileStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            pnlFilterBar.Controls.Add(lblRefFileStatus);
+
+            this.Controls.Add(pnlFilterBar);
+
+            // ==========================================
+            // 4. 底部执行栏
             // ==========================================
             pnlBottom = new Panel();
             pnlBottom.Dock = DockStyle.Bottom;
-            pnlBottom.Height = 85;
+            pnlBottom.Height = 110;
             pnlBottom.BackColor = Color.FromArgb(24, 27, 34);
-            pnlBottom.Padding = new Padding(14, 8, 14, 8);
+            pnlBottom.Padding = new Padding(16, 8, 16, 8);
 
-            // 左侧选项
+            chkRedefineBlocks = new CheckBox();
+            chkRedefineBlocks.Text = "同名图块最高优先级合并重定义 (防跑位/动态块母名穿透)";
+            chkRedefineBlocks.Checked = true;
+            chkRedefineBlocks.ForeColor = Color.FromArgb(255, 215, 0); // 金色
+            chkRedefineBlocks.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            chkRedefineBlocks.Location = new Point(16, 8);
+            chkRedefineBlocks.Size = new Size(400, 22);
+            pnlBottom.Controls.Add(chkRedefineBlocks);
+
             chkMigrateVp = new CheckBox();
-            chkMigrateVp.Text = "视口全覆盖穿透迁移 (Viewport Overrides)";
+            chkMigrateVp.Text = "视口属性无损继承 (HB1/HB2 冻结与覆盖字典)";
             chkMigrateVp.Checked = true;
-            chkMigrateVp.Location = new Point(14, 8);
-            chkMigrateVp.Size = new Size(270, 22);
-            chkMigrateVp.ForeColor = Color.FromArgb(210, 215, 225);
+            chkMigrateVp.ForeColor = Color.FromArgb(100, 220, 255);
+            chkMigrateVp.Location = new Point(420, 8);
+            chkMigrateVp.Size = new Size(320, 22);
             pnlBottom.Controls.Add(chkMigrateVp);
 
             chkDeepBlock = new CheckBox();
-            chkDeepBlock.Text = "穿透所有图块与深层嵌套块定义 (Deep Traversal)";
+            chkDeepBlock.Text = "穿透图块内部实体";
             chkDeepBlock.Checked = true;
-            chkDeepBlock.Location = new Point(290, 8);
-            chkDeepBlock.Size = new Size(310, 22);
-            chkDeepBlock.ForeColor = Color.FromArgb(210, 215, 225);
+            chkDeepBlock.Location = new Point(745, 8);
+            chkDeepBlock.Size = new Size(130, 22);
             pnlBottom.Controls.Add(chkDeepBlock);
 
-            chkPurgeSource = new CheckBox();
-            chkPurgeSource.Text = "合并后物理移除源图层 (Auto Purge)";
-            chkPurgeSource.Checked = true;
-            chkPurgeSource.Location = new Point(610, 8);
-            chkPurgeSource.Size = new Size(230, 22);
-            chkPurgeSource.ForeColor = Color.FromArgb(210, 215, 225);
-            pnlBottom.Controls.Add(chkPurgeSource);
-
             chkResetByLayer = new CheckBox();
-            chkResetByLayer.Text = "重置实体属性为随层 (ByLayer)";
-            chkResetByLayer.Checked = false;
-            chkResetByLayer.Location = new Point(850, 8);
-            chkResetByLayer.Size = new Size(220, 22);
-            chkResetByLayer.ForeColor = Color.FromArgb(210, 215, 225);
+            chkResetByLayer.Text = "图元净化为随层(ByLayer)";
+            chkResetByLayer.Checked = true;
+            chkResetByLayer.Location = new Point(880, 8);
+            chkResetByLayer.Size = new Size(165, 22);
             pnlBottom.Controls.Add(chkResetByLayer);
 
-            // 状态栏
+            chkPurgeSource = new CheckBox();
+            chkPurgeSource.Text = "合并后物理移除源图层";
+            chkPurgeSource.Checked = true;
+            chkPurgeSource.Location = new Point(1050, 8);
+            chkPurgeSource.Size = new Size(155, 22);
+            pnlBottom.Controls.Add(chkPurgeSource);
+
             lblStatus = new Label();
-            lblStatus.Text = "就绪";
-            lblStatus.Location = new Point(14, 45);
-            lblStatus.Size = new Size(540, 24);
+            lblStatus.Text = "就绪。";
             lblStatus.ForeColor = Color.FromArgb(170, 180, 195);
-            lblStatus.TextAlign = ContentAlignment.MiddleLeft;
+            lblStatus.Location = new Point(16, 36);
+            lblStatus.Size = new Size(1140, 22);
             pnlBottom.Controls.Add(lblStatus);
 
-            progressBar = new ProgressBar();
-            progressBar.Location = new Point(560, 48);
-            progressBar.Size = new Size(110, 18);
-            progressBar.Visible = false;
-            pnlBottom.Controls.Add(progressBar);
-
-            // 右侧操作按钮
-            btnClose = new Button();
-            btnClose.Text = "关闭";
-            btnClose.Location = new Point(pnlBottom.Width - 95, 42);
-            btnClose.Size = new Size(80, 32);
-            btnClose.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            btnClose.BackColor = Color.FromArgb(48, 54, 66);
-            btnClose.ForeColor = Color.White;
-            btnClose.FlatStyle = FlatStyle.Flat;
-            btnClose.FlatAppearance.BorderSize = 0;
-            btnClose.Click += (s, e) => this.Close();
-            pnlBottom.Controls.Add(btnClose);
-
             btnExportReport = new Button();
-            btnExportReport.Text = "📊 导出报告";
-            btnExportReport.Location = new Point(pnlBottom.Width - 215, 42);
-            btnExportReport.Size = new Size(110, 32);
-            btnExportReport.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnExportReport.Text = "📊 导出比对报表";
+            btnExportReport.Location = new Point(16, 66);
+            btnExportReport.Size = new Size(130, 34);
             btnExportReport.BackColor = Color.FromArgb(48, 54, 66);
-            btnExportReport.ForeColor = Color.FromArgb(220, 230, 245);
+            btnExportReport.ForeColor = Color.White;
             btnExportReport.FlatStyle = FlatStyle.Flat;
             btnExportReport.FlatAppearance.BorderSize = 0;
+            btnExportReport.Cursor = Cursors.Hand;
             btnExportReport.Click += BtnExportReport_Click;
             pnlBottom.Controls.Add(btnExportReport);
 
             btnNormalizeProps = new Button();
-            btnNormalizeProps.Text = "仅规范化属性 (颜色/线型)";
-            btnNormalizeProps.Location = new Point(pnlBottom.Width - 410, 42);
-            btnNormalizeProps.Size = new Size(185, 32);
-            btnNormalizeProps.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            btnNormalizeProps.BackColor = Color.FromArgb(40, 75, 110);
-            btnNormalizeProps.ForeColor = Color.White;
+            btnNormalizeProps.Text = "🎨 仅对齐属性规范 (不改层名)";
+            btnNormalizeProps.Location = new Point(155, 66);
+            btnNormalizeProps.Size = new Size(195, 34);
+            btnNormalizeProps.BackColor = Color.FromArgb(40, 50, 68);
+            btnNormalizeProps.ForeColor = Color.FromArgb(180, 205, 240);
             btnNormalizeProps.FlatStyle = FlatStyle.Flat;
-            btnNormalizeProps.FlatAppearance.BorderSize = 0;
+            btnNormalizeProps.FlatAppearance.BorderColor = Color.FromArgb(60, 80, 110);
+            btnNormalizeProps.Cursor = Cursors.Hand;
             btnNormalizeProps.Click += BtnNormalizeProps_Click;
             pnlBottom.Controls.Add(btnNormalizeProps);
 
             btnExecuteMerge = new Button();
-            btnExecuteMerge.Text = "⚡ 一键全自动智能合并";
-            btnExecuteMerge.Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
-            btnExecuteMerge.Location = new Point(pnlBottom.Width - 620, 42);
-            btnExecuteMerge.Size = new Size(200, 32);
-            btnExecuteMerge.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            btnExecuteMerge.BackColor = Color.FromArgb(14, 99, 156);
+            btnExecuteMerge.Text = "🚀 执行全自动深度翻图合并";
+            btnExecuteMerge.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
+            btnExecuteMerge.Location = new Point(360, 64);
+            btnExecuteMerge.Size = new Size(240, 38);
+            btnExecuteMerge.BackColor = Color.FromArgb(0, 122, 204);
             btnExecuteMerge.ForeColor = Color.White;
             btnExecuteMerge.FlatStyle = FlatStyle.Flat;
             btnExecuteMerge.FlatAppearance.BorderSize = 0;
@@ -311,56 +376,67 @@ namespace XY_Deepening_Toolbox
             btnExecuteMerge.Click += BtnExecuteMerge_Click;
             pnlBottom.Controls.Add(btnExecuteMerge);
 
+            btnClose = new Button();
+            btnClose.Text = "关闭";
+            btnClose.Location = new Point(pnlBottom.Width - 110, 66);
+            btnClose.Size = new Size(95, 34);
+            btnClose.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnClose.BackColor = Color.FromArgb(48, 54, 66);
+            btnClose.ForeColor = Color.White;
+            btnClose.FlatStyle = FlatStyle.Flat;
+            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose.Cursor = Cursors.Hand;
+            btnClose.Click += (s, e) => this.Close();
+            pnlBottom.Controls.Add(btnClose);
+
             this.Controls.Add(pnlBottom);
 
             // ==========================================
-            // 4. 中间主比对表格 DataGridView
+            // 5. 核心 DataGridView
             // ==========================================
             dgvCompare = new DataGridView();
             dgvCompare.Dock = DockStyle.Fill;
+            dgvCompare.BorderStyle = BorderStyle.None;
+            dgvCompare.BackgroundColor = Color.FromArgb(20, 23, 29);
+            dgvCompare.GridColor = Color.FromArgb(45, 50, 62);
+            dgvCompare.RowHeadersVisible = false;
             dgvCompare.AllowUserToAddRows = false;
             dgvCompare.AllowUserToDeleteRows = false;
             dgvCompare.AllowUserToResizeRows = false;
-            dgvCompare.RowHeadersVisible = false;
             dgvCompare.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvCompare.BackgroundColor = Color.FromArgb(28, 32, 40);
-            dgvCompare.BorderStyle = BorderStyle.None;
-            dgvCompare.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-            dgvCompare.GridColor = Color.FromArgb(42, 47, 58);
-            dgvCompare.RowTemplate.Height = 28;
 
             colCheck = new DataGridViewCheckBoxColumn();
-            colCheck.HeaderText = "执行";
-            colCheck.Width = 45;
+            colCheck.HeaderText = "合并";
+            colCheck.Width = 46;
             dgvCompare.Columns.Add(colCheck);
 
             colIndex = new DataGridViewTextBoxColumn();
             colIndex.HeaderText = "#";
-            colIndex.Width = 40;
+            colIndex.Width = 42;
             colIndex.ReadOnly = true;
             dgvCompare.Columns.Add(colIndex);
 
             colCurName = new DataGridViewTextBoxColumn();
-            colCurName.HeaderText = "当前图层名";
-            colCurName.Width = 160;
+            colCurName.HeaderText = "当前图层名称";
+            colCurName.Width = 170;
             colCurName.ReadOnly = true;
             dgvCompare.Columns.Add(colCurName);
 
             colEntityCount = new DataGridViewTextBoxColumn();
             colEntityCount.HeaderText = "图元数";
-            colEntityCount.Width = 70;
+            colEntityCount.Width = 75;
             colEntityCount.ReadOnly = true;
             dgvCompare.Columns.Add(colEntityCount);
 
             colCurColor = new DataGridViewTextBoxColumn();
             colCurColor.HeaderText = "当前颜色";
-            colCurColor.Width = 95;
+            colCurColor.Width = 105;
             colCurColor.ReadOnly = true;
             dgvCompare.Columns.Add(colCurColor);
 
             colCurLt = new DataGridViewTextBoxColumn();
             colCurLt.HeaderText = "当前线型";
-            colCurLt.Width = 95;
+            colCurLt.Width = 105;
             colCurLt.ReadOnly = true;
             dgvCompare.Columns.Add(colCurLt);
 
@@ -371,32 +447,28 @@ namespace XY_Deepening_Toolbox
             dgvCompare.Columns.Add(colCurLw);
 
             colMatchStatus = new DataGridViewTextBoxColumn();
-            colMatchStatus.HeaderText = "匹配置信度与状态";
-            colMatchStatus.Width = 175;
+            colMatchStatus.HeaderText = "智能匹配结果 (置信度)";
+            colMatchStatus.Width = 200;
             colMatchStatus.ReadOnly = true;
             dgvCompare.Columns.Add(colMatchStatus);
 
             colTarName = new DataGridViewTextBoxColumn();
-            colTarName.HeaderText = "推荐目标标准图层 (可直接输入/自选)";
-            colTarName.Width = 200;
+            colTarName.HeaderText = "目标标准图层 (双击微调)";
+            colTarName.Width = 185;
             dgvCompare.Columns.Add(colTarName);
 
             colTarColor = new DataGridViewTextBoxColumn();
             colTarColor.HeaderText = "标准颜色";
-            colTarColor.Width = 95;
+            colTarColor.Width = 100;
             colTarColor.ReadOnly = true;
             dgvCompare.Columns.Add(colTarColor);
 
             colTarLt = new DataGridViewTextBoxColumn();
             colTarLt.HeaderText = "标准线型";
-            colTarLt.Width = 95;
+            colTarLt.Width = 100;
             colTarLt.ReadOnly = true;
             dgvCompare.Columns.Add(colTarLt);
 
-            dgvCompare.DataError += delegate(object s, DataGridViewDataErrorEventArgs e) {
-                e.ThrowException = false;
-                e.Cancel = false;
-            };
             dgvCompare.CellPainting += DgvCompare_CellPainting;
             dgvCompare.CellValueChanged += DgvCompare_CellValueChanged;
             dgvCompare.CurrentCellDirtyStateChanged += (s, e) => { if (dgvCompare.IsCurrentCellDirty) dgvCompare.CommitEdit(DataGridViewDataErrorContexts.Commit); };
@@ -407,7 +479,6 @@ namespace XY_Deepening_Toolbox
 
         private void ApplyCustomStyles()
         {
-            // 启用双缓冲消除表格闪烁
             typeof(DataGridView).InvokeMember("DoubleBuffered",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.SetProperty,
                 null, dgvCompare, new object[] { true });
@@ -433,24 +504,27 @@ namespace XY_Deepening_Toolbox
                 Database db = doc.Database;
 
                 _currentLayers = LayerCompareEngine.ExtractCurrentLayers(db);
+                _currentBlocks = LayerCompareEngine.ExtractBlocks(db);
 
                 int total = _currentLayers.Count;
                 int active = _currentLayers.FindAll(x => !x.IsEmpty).Count;
                 int empty = total - active;
 
-                rbShowAll.Text = string.Format("显示全部图层 ({0})", total);
-                rbShowActiveOnly.Text = string.Format("仅显示在用图层 (隐藏 {0} 个空层)", empty);
+                rbShowAll.Text = string.Format("显示全部 ({0})", total);
+                rbShowActiveOnly.Text = string.Format("仅在用 (藏 {0} 空层)", empty);
 
-                // 重新比对
                 _allMatches = LayerCompareEngine.ComputeMatches(_currentLayers, _refLayers);
+                _blockMatches = LayerCompareEngine.ComputeBlockMatches(_currentBlocks, _refBlocks);
+
                 ApplyFilter();
 
-                lblStatus.Text = string.Format("当前图纸共 {0} 个图层（在用 {1} 个，空图层 {2} 个） | 目标参考图层库: {3} 个",
-                    total, active, empty, _refLayers.Count);
+                int sameBlockCount = _blockMatches.FindAll(x => x.IsSameNameMatched).Count;
+                lblStatus.Text = string.Format("当前图层: {0} 个 (在用 {1}) | 图块: {2} 个 (同名匹配 {3} 个最高优先级) | 参考标准层: {4} 个",
+                    total, active, _currentBlocks.Count, sameBlockCount, _refLayers.Count);
             }
             catch (System.Exception ex)
             {
-                lblStatus.Text = "读取当前图层失败: " + ex.Message;
+                lblStatus.Text = "读取当前图纸失败: " + ex.Message;
             }
         }
 
@@ -497,12 +571,11 @@ namespace XY_Deepening_Toolbox
                 }
                 else
                 {
-                    statusText = "— 无合适建议";
+                    statusText = "— 保持原样";
                 }
 
                 string tarColor = item.BestMatchRefLayer != null ? item.BestMatchRefLayer.ColorDescription : "—";
                 string tarLt = item.BestMatchRefLayer != null ? item.BestMatchRefLayer.LinetypeName : "—";
-
                 string targetVal = !string.IsNullOrEmpty(item.TargetLayerName) ? item.TargetLayerName : "— 保持原图层 —";
 
                 int rowIndex = dgvCompare.Rows.Add(
@@ -520,8 +593,6 @@ namespace XY_Deepening_Toolbox
                 );
 
                 dgvCompare.Rows[rowIndex].Tag = item;
-
-                // 若为空图层，整行字体设为浅灰，直观一目了然
                 if (item.CurrentLayer.IsEmpty)
                 {
                     dgvCompare.Rows[rowIndex].DefaultCellStyle.ForeColor = Color.FromArgb(130, 140, 155);
@@ -533,7 +604,6 @@ namespace XY_Deepening_Toolbox
         {
             if (e.RowIndex < 0 || e.RowIndex >= dgvCompare.Rows.Count) return;
 
-            // 在“当前颜色”和“标准颜色”单元格左侧绘制鲜艳的色块 swatch
             if (e.ColumnIndex == colCurColor.Index || e.ColumnIndex == colTarColor.Index)
             {
                 e.Paint(e.CellBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
@@ -557,7 +627,6 @@ namespace XY_Deepening_Toolbox
                             e.Graphics.DrawRectangle(p, rect);
                         }
 
-                        // 绘制文字
                         string text = e.Value != null ? e.Value.ToString() : "";
                         Rectangle textRect = new Rectangle(e.CellBounds.X + 24, e.CellBounds.Y, e.CellBounds.Width - 24, e.CellBounds.Height);
                         TextRenderer.DrawText(e.Graphics, text, e.CellStyle.Font, textRect, e.CellStyle.ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
@@ -603,8 +672,207 @@ namespace XY_Deepening_Toolbox
         }
 
         // ==========================================
-        // 核心事件：一键物理清理未使用空图层 (维度 1)
+        // 核心事件：载入上次翻图记忆 (多图复用)
         // ==========================================
+        private void BtnLoadLastPreset_Click(object sender, EventArgs e)
+        {
+            FlipRulePreset preset = FlipRuleStorage.LoadLastPreset();
+            if (preset == null || preset.LayerMappings == null || preset.LayerMappings.Count == 0)
+            {
+                MessageBox.Show(this, "暂无历史翻图记忆记录。\n请先选择参考图完成一次标准翻图！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int hitCount = 0;
+            foreach (var match in _allMatches)
+            {
+                if (preset.LayerMappings.ContainsKey(match.CurrentLayer.Name))
+                {
+                    match.TargetLayerName = preset.LayerMappings[match.CurrentLayer.Name];
+                    match.IsSelectedForMerge = true;
+                    match.MatchReason = "★ 记忆方案自动对齐";
+                    match.Level = MatchConfidenceLevel.High;
+                    hitCount++;
+                }
+            }
+
+            ApplyFilter();
+            MessageBox.Show(this, string.Format("已成功载入上次翻图记忆！\n共自动匹配当前图纸中的 {0} 个业务图层。\n核对无误后点击下方【执行全自动深度翻图合并】即可！", hitCount), "载入记忆成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // ==========================================
+        // 核心事件：一键套用并执行翻图 (秒翻)
+        // ==========================================
+        private void BtnQuickFlipNow_Click(object sender, EventArgs e)
+        {
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+
+            using (doc.LockDocument())
+            {
+                MergeReport r = LayerDeepMergeService.QuickApplyLastPreset(doc.Database);
+                MessageBox.Show(this, r.SummaryMessage, "极速翻图结果", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                doc.Editor.UpdateScreen();
+            }
+
+            RefreshCurrentDrawingLayers();
+        }
+
+        // ==========================================
+        // 核心事件：双图逆向分析 (反推提取合并规则)
+        // ==========================================
+        private void BtnReverseInfer_Click(object sender, EventArgs e)
+        {
+            string rawPath = "";
+            string finPath = "";
+
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "第 1 步: 请选择【翻图前的原始底图 (旧图)】";
+                ofd.Filter = "AutoCAD 图纸 (*.dwg)|*.dwg";
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+                rawPath = ofd.FileName;
+            }
+
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "第 2 步: 请选择【已翻好的标准成品图 (新图)】";
+                ofd.Filter = "AutoCAD 图纸 (*.dwg)|*.dwg";
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+                finPath = ofd.FileName;
+            }
+
+            lblStatus.Text = "正在进行双图句柄碰撞与空间图元逆向分析，请稍候...";
+            this.Cursor = Cursors.WaitCursor;
+
+            try
+            {
+                FlipRulePreset inferred = LayerCompareEngine.ReverseInferMappings(rawPath, finPath);
+                this.Cursor = Cursors.Default;
+
+                if (inferred == null || inferred.LayerMappings.Count == 0)
+                {
+                    MessageBox.Show(this, "未能在两张图纸中检测出图层变化，或两图图元不匹配。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // 将反推结果自动保存为记忆，并直接应用到当前面板
+                FlipRuleStorage.SaveLastPreset(inferred);
+
+                int hitCount = 0;
+                foreach (var match in _allMatches)
+                {
+                    if (inferred.LayerMappings.ContainsKey(match.CurrentLayer.Name))
+                    {
+                        match.TargetLayerName = inferred.LayerMappings[match.CurrentLayer.Name];
+                        match.IsSelectedForMerge = true;
+                        match.MatchReason = "★ 双图逆向反推规则";
+                        match.Level = MatchConfidenceLevel.ExactMatch;
+                        hitCount++;
+                    }
+                }
+
+                ApplyFilter();
+
+                string msg = string.Format(
+                    "★ 逆向对比破译成功！\n\n" +
+                    "• 成功反推提取出 {0} 条图层合并映射规则\n" +
+                    "• 成功提取出 {1} 个同名图块重定义规则\n" +
+                    "• 已完美命中当前图纸中的 {2} 个业务图层\n\n" +
+                    "已自动将该规则保存为最新记忆，后续图纸可直接敲 XFT 秒翻！",
+                    inferred.LayerMappings.Count, inferred.BlockMappings.Count, hitCount);
+
+                MessageBox.Show(this, msg, "逆向分析完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (System.Exception ex)
+            {
+                this.Cursor = Cursors.Default;
+                MessageBox.Show(this, "逆向分析失败: " + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // 保存方案
+        private void BtnSavePreset_Click(object sender, EventArgs e)
+        {
+            using (SaveFileDialog sfd = new SaveFileDialog())
+            {
+                sfd.Title = "保存翻图方案规则包";
+                sfd.Filter = "翻图规则方案 (*.xyrule)|*.xyrule|JSON 文件 (*.json)|*.json";
+                sfd.FileName = "翻图方案_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".xyrule";
+                if (sfd.ShowDialog(this) == DialogResult.OK)
+                {
+                    FlipRulePreset preset = new FlipRulePreset();
+                    preset.PresetName = Path.GetFileNameWithoutExtension(sfd.FileName);
+                    preset.RefDwgPath = _refDwgPath;
+                    preset.DeepBlockTraversal = chkDeepBlock.Checked;
+                    preset.MigrateViewportOverrides = chkMigrateVp.Checked;
+                    preset.PurgeSourceLayersAfterMerge = chkPurgeSource.Checked;
+                    preset.ResetEntitiesByLayer = chkResetByLayer.Checked;
+                    preset.RedefineSameNameBlocks = chkRedefineBlocks.Checked;
+
+                    foreach (var item in _allMatches)
+                    {
+                        if (item.IsSelectedForMerge && !string.IsNullOrEmpty(item.TargetLayerName) && item.TargetLayerName != item.CurrentLayer.Name)
+                        {
+                            preset.LayerMappings[item.CurrentLayer.Name] = item.TargetLayerName;
+                        }
+                    }
+
+                    foreach (var bm in _blockMatches)
+                    {
+                        if (bm.IsSelectedForMerge)
+                        {
+                            preset.BlockMappings[bm.BlockName] = bm.TargetBlockName;
+                        }
+                    }
+
+                    string json = new JavaScriptSerializer().Serialize(preset);
+                    File.WriteAllText(sfd.FileName, json, Encoding.UTF8);
+                    MessageBox.Show(this, "方案已成功导出！可分享给全组团队复用:\n" + sfd.FileName, "保存成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+        }
+
+        // 载入方案
+        private void BtnLoadPreset_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "选择翻图方案规则包";
+                ofd.Filter = "翻图规则方案 (*.xyrule)|*.xyrule|JSON 文件 (*.json)|*.json";
+                if (ofd.ShowDialog(this) == DialogResult.OK)
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(ofd.FileName, Encoding.UTF8);
+                        FlipRulePreset preset = new JavaScriptSerializer().Deserialize<FlipRulePreset>(json);
+                        if (preset != null && preset.LayerMappings != null)
+                        {
+                            FlipRuleStorage.SaveLastPreset(preset);
+                            int hitCount = 0;
+                            foreach (var match in _allMatches)
+                            {
+                                if (preset.LayerMappings.ContainsKey(match.CurrentLayer.Name))
+                                {
+                                    match.TargetLayerName = preset.LayerMappings[match.CurrentLayer.Name];
+                                    match.IsSelectedForMerge = true;
+                                    match.MatchReason = "★ 方案包规则匹配";
+                                    hitCount++;
+                                }
+                            }
+                            ApplyFilter();
+                            MessageBox.Show(this, string.Format("方案载入成功！共匹配 {0} 个图层，已同步至最新记忆！", hitCount), "载入成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        MessageBox.Show(this, "载入方案失败: " + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
+        // 一键清理空图层
         private void BtnPurgeUnused_Click(object sender, EventArgs e)
         {
             Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
@@ -614,7 +882,6 @@ namespace XY_Deepening_Toolbox
             using (doc.LockDocument())
             {
                 PurgeReport report = LayerPurgeService.PurgeUnusedLayers(db);
-                
                 string msg = string.Format(
                     "【清理报告】\n\n" +
                     "• 深度扫描图层总数: {0} 个\n" +
@@ -628,11 +895,10 @@ namespace XY_Deepening_Toolbox
                 MessageBox.Show(this, msg, "图层物理清理完毕", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
 
-            // 实时刷新表格数据
             RefreshCurrentDrawingLayers();
         }
 
-        // 选择参考 DWG
+        // 选择参考标准 DWG
         private void BtnBrowseRefDwg_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog ofd = new OpenFileDialog())
@@ -644,14 +910,21 @@ namespace XY_Deepening_Toolbox
                     _refDwgPath = ofd.FileName;
                     lblRefFileStatus.Text = "已载入: " + Path.GetFileName(_refDwgPath);
                     _refLayers = LayerCompareEngine.ExtractReferenceLayers(_refDwgPath);
+                    _refBlocks = LayerCompareEngine.ExtractReferenceBlocks(_refDwgPath);
+
                     _allMatches = LayerCompareEngine.ComputeMatches(_currentLayers, _refLayers);
+                    _blockMatches = LayerCompareEngine.ComputeBlockMatches(_currentBlocks, _refBlocks);
+
                     ApplyFilter();
-                    lblStatus.Text = string.Format("标准库已载入 {0} 个参考图层，完成智能语义匹配计算！", _refLayers.Count);
+
+                    int sameBlockCount = _blockMatches.FindAll(x => x.IsSameNameMatched).Count;
+                    lblStatus.Text = string.Format("标准库已载入: {0} 个图层，{1} 个图块 (同名命中 {2} 个，同名块将最高优先级重定义)！",
+                        _refLayers.Count, _refBlocks.Count, sameBlockCount);
                 }
             }
         }
 
-        // 载入 LIN 线型库
+        // 载入 LIN
         private void BtnBrowseLin_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog ofd = new OpenFileDialog())
@@ -689,7 +962,7 @@ namespace XY_Deepening_Toolbox
 
             using (doc.LockDocument())
             {
-                MergeReport r = LayerDeepMergeService.ExecuteDeepMerge(doc.Database, _allMatches, opts);
+                MergeReport r = LayerDeepMergeService.ExecuteDeepMerge(doc.Database, _allMatches, opts, _blockMatches);
                 MessageBox.Show(this, r.SummaryMessage, "规范化对齐完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 doc.Editor.UpdateScreen();
             }
@@ -697,25 +970,29 @@ namespace XY_Deepening_Toolbox
             RefreshCurrentDrawingLayers();
         }
 
-        // 执行全自动深度合并
+        // 执行全自动深度翻图合并
         private void BtnExecuteMerge_Click(object sender, EventArgs e)
         {
             List<LayerMatchResult> selected = _allMatches.FindAll(x => x.IsSelectedForMerge && !string.IsNullOrEmpty(x.TargetLayerName) && x.TargetLayerName != x.CurrentLayer.Name);
-            if (selected.Count == 0)
+            int sameBlocksToRedefine = chkRedefineBlocks.Checked ? _blockMatches.FindAll(x => x.IsSelectedForMerge && x.IsSameNameMatched).Count : 0;
+
+            if (selected.Count == 0 && sameBlocksToRedefine == 0)
             {
-                MessageBox.Show(this, "当前没有勾选需要执行跨层合并的图层项！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "当前没有勾选需要执行合并的图层或图块项！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             string confirmMsg = string.Format(
-                "即将执行全自动深度穿透合并：\n\n" +
+                "即将执行全自动深度穿透翻图合并：\n\n" +
                 "• 待合并图层数: {0} 个\n" +
-                "• 视口图层覆盖无损迁移: {1}\n" +
-                "• 穿透图块与嵌套块定义: {2}\n" +
-                "• 合并后物理移除源图层: {3}\n" +
-                "• 图元属性重置随层(ByLayer): {4}\n\n" +
+                "• 同名图块重定义: {1} 个 (最高优先级 · 坐标防跑偏)\n" +
+                "• 视口图层覆盖无损迁移: {2} (HB1/HB2 逻辑)\n" +
+                "• 穿透图块与嵌套块定义: {3}\n" +
+                "• 合并后物理移除源图层: {4}\n" +
+                "• 图元属性重置随层(ByLayer): {5}\n\n" +
                 "是否立即开始处理？",
                 selected.Count,
+                sameBlocksToRedefine,
                 chkMigrateVp.Checked ? "是" : "否",
                 chkDeepBlock.Checked ? "是" : "否",
                 chkPurgeSource.Checked ? "是" : "否",
@@ -734,12 +1011,14 @@ namespace XY_Deepening_Toolbox
             opts.DeepBlockTraversal = chkDeepBlock.Checked;
             opts.PurgeSourceLayersAfterMerge = chkPurgeSource.Checked;
             opts.ResetEntitiesByLayer = chkResetByLayer.Checked;
+            opts.RedefineSameNameBlocks = chkRedefineBlocks.Checked;
+            opts.RefDwgPath = _refDwgPath;
             opts.NormalizeAttributesOnly = false;
 
             using (doc.LockDocument())
             {
-                MergeReport r = LayerDeepMergeService.ExecuteDeepMerge(doc.Database, _allMatches, opts);
-                MessageBox.Show(this, r.SummaryMessage, "深度合并执行完毕", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MergeReport r = LayerDeepMergeService.ExecuteDeepMerge(doc.Database, _allMatches, opts, _blockMatches);
+                MessageBox.Show(this, r.SummaryMessage, "深度翻图合并完毕", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 doc.Editor.UpdateScreen();
             }
 
@@ -752,11 +1031,11 @@ namespace XY_Deepening_Toolbox
             using (SaveFileDialog sfd = new SaveFileDialog())
             {
                 sfd.Filter = "CSV 报表文件 (*.csv)|*.csv|文本文件 (*.txt)|*.txt";
-                sfd.FileName = "图层规范对比与合并报表_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv";
+                sfd.FileName = "图层与图块规范翻图报表_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv";
                 if (sfd.ShowDialog(this) == DialogResult.OK)
                 {
                     StringBuilder sb = new StringBuilder();
-                    sb.AppendLine("序号,当前图层名,图元数,当前颜色,当前线型,线宽,匹配状态,目标标准图层,标准颜色,标准线型,是否执行合并");
+                    sb.AppendLine("序号,当前图层名,图元数,当前颜色,当前线型,线宽,智能匹配状态,目标标准图层,标准颜色,标准线型,是否执行合并");
                     int idx = 1;
                     foreach (var item in _allMatches)
                     {
