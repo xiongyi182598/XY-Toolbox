@@ -42,18 +42,45 @@
    )
 )
 
-;; ҵӦ̬ (̬ʶ߰汾⣬ױ׼ʽ)
+;; 核心机制：在尚未加载任何 DLL 前，自动检测并无感应用在线更新暂存包 (双保险闭环)
+(vl-catch-all-apply
+  '(lambda ( / dir pend-dll target-dll pend-dir bat-f )
+     (setq dir (xy:get-toolbox-dir))
+     (if (and dir (/= dir ""))
+       (progn
+         (setq pend-dll (strcat dir "/pending_update/XY_Toolbox.dll"))
+         (setq target-dll (strcat dir "/XY_Toolbox.dll"))
+         (if (findfile pend-dll)
+           (progn
+             (vl-file-copy pend-dll target-dll nil)
+             (vl-file-delete pend-dll)
+             (setq bat-f (strcat dir "/apply_update.bat"))
+             (if (findfile bat-f) (vl-file-delete bat-f))
+             (princ "\n★ [XY工具箱] 已成功无感完成核心组件最新版本升级！\n")
+           )
+         )
+       )
+     )
+   )
+)
+
+;; 安全动态加载核心 DLL（防重机制：已加载则跳过，杜绝重复 NETLOAD 抛出异常）
 (defun xy:load-latest-dll ( / dir dll-path )
-  (setq dir (xy:get-toolbox-dir))
-  (if (and dir (/= dir ""))
-    (setq dll-path (strcat dir "/XY_Toolbox.dll"))
-    (setq dll-path (findfile "XY_Toolbox.dll"))
-  )
-  (if (and dll-path (findfile dll-path))
+  (if (not *XY-TOOLBOX-LOADED*)
     (progn
-      (setq dll-path (vl-string-translate "\\" "/" dll-path))
-      (vl-catch-all-apply 'vl-cmdf (list "_.netload" dll-path))
-      dll-path
+      (setq dir (xy:get-toolbox-dir))
+      (if (and dir (/= dir ""))
+        (setq dll-path (strcat dir "/XY_Toolbox.dll"))
+        (setq dll-path (findfile "XY_Toolbox.dll"))
+      )
+      (if (and dll-path (findfile dll-path))
+        (progn
+          (setq dll-path (vl-string-translate "\\" "/" dll-path))
+          (vl-catch-all-apply 'vl-cmdf (list "_.netload" dll-path))
+          (setq *XY-TOOLBOX-LOADED* t)
+          dll-path
+        )
+      )
     )
   )
 )
@@ -1542,7 +1569,7 @@
 (defun c:XQL () (c:PU))
 (defun c:XKJ () (if c:SETKEY (c:SETKEY) (princ "\n请先加载 XY工具箱！")))
 
-(defun c:RELOAD ( / path dir erase_f latest_dll d )
+(defun c:RELOAD ( / path dir erase_f )
   (setq dir (xy:get-toolbox-dir))
   (if (and dir (/= dir ""))
     (setq path (strcat dir "/autoload.lsp"))
@@ -1553,7 +1580,6 @@
       (load path)
       (if (and dir (/= dir ""))
         (progn
-          (setq latest_dll (xy:load-latest-dll))
           (setq erase_f (strcat dir "/xy_block_erase.lsp"))
           (if (findfile erase_f) (load erase_f))
         )
@@ -1564,11 +1590,13 @@
       (if apply_all_toolbox_shortcuts
         (apply_all_toolbox_shortcuts)
       )
+      ;; 安全触发 C# 工作台面板刷新（若面板已创建）
+      (vl-catch-all-apply 'vl-cmdf (list "XY_UPDATE_PANEL"))
       (princ "\n========================================================\n")
-      (princ "★ [XY工具箱] 程序热重载成功 (XCZ)！\n")
-      (princ "★ 核心 .NET 内核与全套功能已刷新为最新版本：\n")
+      (princ "★ [XY工具箱] 程序配置与全套快捷键热重载成功 (XCZ)！\n")
+      (princ "★ 核心组件与全套功能已刷新：\n")
       (princ "  - SK  / SKYS : 视口图层样式悬浮覆盖 (穿透拾取/改色/改线型)\n")
-      (princ "  - FZW / XFZ  : 图块镜像文字原位穿透翻正 (多次镜像手性自适应)\n")
+      (princ "  - FZW / XFZ  : 图块镜像文字原位穿透翻正 (几何中心严格锁死)\n")
       (princ "  - XKB / XLS  : 原位免在位编辑穿透图块拉伸与平移\n")
       (princ "  - XHB / XJH  : 规范化图层合并器与极速点选合层\n")
       (princ "  - KSC / XSC  : 免炸开穿透删除块内图元 (支持M键联动/独占)\n")

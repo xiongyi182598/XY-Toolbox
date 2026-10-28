@@ -665,7 +665,7 @@ namespace XY_Toolbox
                         }
                     }
 
-                    // 生成启动时自动覆盖批处理脚本
+                    // 生成自动覆盖批处理脚本与后台守护替换进程
                     string applyBat = Path.Combine(rootDir, "apply_update.bat");
                     string batContent = "@echo off\r\n" +
                                         "timeout /t 1 /nobreak >nul\r\n" +
@@ -675,6 +675,35 @@ namespace XY_Toolbox
                                         ")\r\n" +
                                         "del \"%~f0\" >nul 2>&1\r\n";
                     File.WriteAllText(applyBat, batContent, Encoding.Default);
+
+                    if (dllLocked)
+                    {
+                        try
+                        {
+                            string updaterBat = Path.Combine(rootDir, "run_updater.bat");
+                            string waitLoopBat = "@echo off\r\n" +
+                                                 ":loop\r\n" +
+                                                 "timeout /t 2 /nobreak >nul\r\n" +
+                                                 "if not exist pending_update\\XY_Toolbox.dll goto done\r\n" +
+                                                 "copy /y pending_update\\*.dll . >nul 2>&1\r\n" +
+                                                 "del /f /q pending_update\\XY_Toolbox.dll >nul 2>&1\r\n" +
+                                                 "if exist pending_update\\XY_Toolbox.dll goto loop\r\n" +
+                                                 ":done\r\n" +
+                                                 "rd /s /q pending_update >nul 2>&1\r\n" +
+                                                 "if exist apply_update.bat del /f /q apply_update.bat >nul 2>&1\r\n" +
+                                                 "del \"%~f0\" >nul 2>&1\r\n";
+                            File.WriteAllText(updaterBat, waitLoopBat, Encoding.Default);
+
+                            ProcessStartInfo psi = new ProcessStartInfo();
+                            psi.FileName = "cmd.exe";
+                            psi.Arguments = "/c \"" + updaterBat + "\"";
+                            psi.CreateNoWindow = true;
+                            psi.UseShellExecute = false;
+                            psi.WindowStyle = ProcessWindowStyle.Hidden;
+                            Process.Start(psi);
+                        }
+                        catch { }
+                    }
 
                     this.Invoke(new Action(() =>
                     {
