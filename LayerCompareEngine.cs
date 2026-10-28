@@ -352,6 +352,24 @@ namespace XY_Deepening_Toolbox
         /// <summary>
         /// 提取图纸中所有图块定义与实例统计 (穿透动态块母名)
         /// </summary>
+        public static string GetEffectiveBlockName(BlockReference br, Transaction tr)
+        {
+            if (br == null) return "";
+            try
+            {
+                if (br.IsDynamicBlock)
+                {
+                    BlockTableRecord dynBtr = (BlockTableRecord)tr.GetObject(br.DynamicBlockTableRecord, OpenMode.ForRead);
+                    if (dynBtr != null) return dynBtr.Name;
+                }
+                return br.Name;
+            }
+            catch
+            {
+                return br.Name;
+            }
+        }
+
         public static List<BlockMatchInfo> ExtractBlocks(Database db)
         {
             List<BlockMatchInfo> list = new List<BlockMatchInfo>();
@@ -478,7 +496,6 @@ namespace XY_Deepening_Toolbox
                 }
                 else
                 {
-                    // 非同名，检查前缀或类别同名
                     string cleanCur = StripCommonPrefixes(cb.BlockName);
                     string bestMatch = null;
                     foreach (var kvp in refDict)
@@ -513,8 +530,17 @@ namespace XY_Deepening_Toolbox
             return result;
         }
 
+        private class GraphicEntitySignature
+        {
+            public string Layer { get; set; }
+            public string TypeName { get; set; }
+            public double X { get; set; }
+            public double Y { get; set; }
+            public string BlockName { get; set; }
+        }
+
         /// <summary>
-        /// 双图逆向反推图层合并规则算法 (Handle 句柄追踪 + 空间几何碰撞)
+        /// 双图逆向反推图层合并规则算法 (Handle 句柄碰撞 + 真实空间几何网格特征重叠碰撞)
         /// </summary>
         public static FlipRulePreset ReverseInferMappings(string rawDwgPath, string finishedDwgPath)
         {
@@ -536,54 +562,133 @@ namespace XY_Deepening_Toolbox
                 rawDb.ReadDwgFile(rawDwgPath, FileShare.Read, true, "");
                 finDb.ReadDwgFile(finishedDwgPath, FileShare.Read, true, "");
 
-                // 1. 建立原图句柄到图层映射
+                // 统计各原图层的目标走向 (多数投票机制)
+                Dictionary<string, Dictionary<string, int>> votes = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+                Action<string, string> recordVote = (oldLyr, newLyr) =>
+                {
+                    if (string.IsNullOrEmpty(oldLyr) || string.IsNullOrEmpty(newLyr)) return;
+                    if (!votes.ContainsKey(oldLyr)) votes[oldLyr] = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    if (!votes[oldLyr].ContainsKey(newLyr)) votes[oldLyr][newLyr] = 0;
+                    votes[oldLyr][newLyr]++;
+                };
+
+                // 1. 第一层：Handle 句柄追踪网络
                 Dictionary<string, string> rawHandleToLayer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                // 空间网格索引 (key: "RoundX_RoundY_Type")
+                Dictionary<string, GraphicEntitySignature> rawSpatialIndex = new Dictionary<string, GraphicEntitySignature>(StringComparer.OrdinalIgnoreCase);
+
                 using (Transaction trRaw = rawDb.TransactionManager.StartTransaction())
                 {
                     BlockTable bt = (BlockTable)trRaw.GetObject(rawDb.BlockTableId, OpenMode.ForRead);
                     foreach (ObjectId btrId in bt)
                     {
                         BlockTableRecord btr = (BlockTableRecord)trRaw.GetObject(btrId, OpenMode.ForRead);
+                        if (btr.IsFromExternalReference) continue;
+
                         foreach (ObjectId entId in btr)
                         {
                             Entity ent = trRaw.GetObject(entId, OpenMode.ForRead) as Entity;
                             if (ent != null)
                             {
-                                rawHandleToLayer[ent.Handle.ToString()] = ent.Layer;
+                                string h = ent.Handle.ToString();
+                                rawHandleToLayer[h] = ent.Layer;
+
+                                // 空间特征提取 (以 20 绘图单位分网格)
+                                double cx = 0, cy = 0;
+                                string blkName = "";
+                                BlockReference br = ent as BlockReference;
+                                if (br != null)
+                                {
+                                    cx = br.Position.X;
+                                    cy = br.Position.Y;
+                                    blkName = br.Name;
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        Extents3d ext = ent.GeometricExtents;
+                                        cx = (ext.MinPoint.X + ext.MaxPoint.X) * 0.5;
+                                        cy = (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5;
+                                    }
+                                    catch { }
+                                }
+
+                                int gx = (int)Math.Round(cx / 20.0);
+                                int gy = (int)Math.Round(cy / 20.0);
+                                string sKey = string.Format("{0}_{1}_{2}_{3}", gx, gy, ent.GetType().Name, blkName);
+                                if (!rawSpatialIndex.ContainsKey(sKey))
+                                {
+                                    rawSpatialIndex[sKey] = new GraphicEntitySignature
+                                    {
+                                        Layer = ent.Layer,
+                                        TypeName = ent.GetType().Name,
+                                        X = cx,
+                                        Y = cy,
+                                        BlockName = blkName
+                                    };
+                                }
                             }
                         }
                     }
                     trRaw.Commit();
                 }
 
-                // 2. 在成品图中匹配相同 Handle，统计各原图层的目标走向 (多数投票)
-                Dictionary<string, Dictionary<string, int>> votes = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+                // 2. 第二层：在成品图中执行【Handle 碰撞 + 空间几何网格特征重叠碰撞】
                 using (Transaction trFin = finDb.TransactionManager.StartTransaction())
                 {
                     BlockTable bt = (BlockTable)trFin.GetObject(finDb.BlockTableId, OpenMode.ForRead);
                     foreach (ObjectId btrId in bt)
                     {
                         BlockTableRecord btr = (BlockTableRecord)trFin.GetObject(btrId, OpenMode.ForRead);
+                        if (btr.IsFromExternalReference) continue;
+
                         foreach (ObjectId entId in btr)
                         {
                             Entity ent = trFin.GetObject(entId, OpenMode.ForRead) as Entity;
-                            if (ent != null)
-                            {
-                                string h = ent.Handle.ToString();
-                                if (rawHandleToLayer.ContainsKey(h))
-                                {
-                                    string oldLyr = rawHandleToLayer[h];
-                                    string newLyr = ent.Layer;
+                            if (ent == null) continue;
 
-                                    if (!votes.ContainsKey(oldLyr))
+                            string h = ent.Handle.ToString();
+                            string newLyr = ent.Layer;
+                            bool matchedByHandle = false;
+
+                            // A. Handle 匹配
+                            if (rawHandleToLayer.ContainsKey(h))
+                            {
+                                recordVote(rawHandleToLayer[h], newLyr);
+                                matchedByHandle = true;
+                            }
+
+                            // B. 空间几何重叠碰撞 (应对另存/复制/句柄变动)
+                            if (!matchedByHandle)
+                            {
+                                double cx = 0, cy = 0;
+                                string blkName = "";
+                                BlockReference br = ent as BlockReference;
+                                if (br != null)
+                                {
+                                    cx = br.Position.X;
+                                    cy = br.Position.Y;
+                                    blkName = br.Name;
+                                }
+                                else
+                                {
+                                    try
                                     {
-                                        votes[oldLyr] = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                                        Extents3d ext = ent.GeometricExtents;
+                                        cx = (ext.MinPoint.X + ext.MaxPoint.X) * 0.5;
+                                        cy = (ext.MinPoint.Y + ext.MaxPoint.Y) * 0.5;
                                     }
-                                    if (!votes[oldLyr].ContainsKey(newLyr))
-                                    {
-                                        votes[oldLyr][newLyr] = 0;
-                                    }
-                                    votes[oldLyr][newLyr]++;
+                                    catch { }
+                                }
+
+                                int gx = (int)Math.Round(cx / 20.0);
+                                int gy = (int)Math.Round(cy / 20.0);
+                                string sKey = string.Format("{0}_{1}_{2}_{3}", gx, gy, ent.GetType().Name, blkName);
+
+                                if (rawSpatialIndex.ContainsKey(sKey))
+                                {
+                                    recordVote(rawSpatialIndex[sKey].Layer, newLyr);
                                 }
                             }
                         }
@@ -591,7 +696,7 @@ namespace XY_Deepening_Toolbox
                     trFin.Commit();
                 }
 
-                // 3. 统计每种旧图层的绝对归宿
+                // 3. 统计每种旧图层的绝对归宿 (多数投票)
                 foreach (var kvp in votes)
                 {
                     string oldLayer = kvp.Key;
@@ -606,13 +711,13 @@ namespace XY_Deepening_Toolbox
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(bestTarget) && !bestTarget.Equals(oldLayer, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(bestTarget))
                     {
                         preset.LayerMappings[oldLayer] = bestTarget;
                     }
                 }
 
-                // 4. 统计同名图块
+                // 4. 提取同名图块重定义
                 List<BlockMatchInfo> rawBlks = ExtractBlocks(rawDb);
                 List<BlockMatchInfo> finBlks = ExtractBlocks(finDb);
                 List<BlockMatchInfo> blkMatches = ComputeBlockMatches(rawBlks, finBlks);
@@ -786,10 +891,7 @@ namespace XY_Deepening_Toolbox
                 {
                     res.Level = MatchConfidenceLevel.ExactMatch;
                     res.TargetLayerName = bestRef.Name;
-                    if (cur.ColorIndex != bestRef.ColorIndex || !string.Equals(cur.LinetypeName, bestRef.LinetypeName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        res.MatchReason = "同名图层 (属性需规范化对齐)";
-                    }
+                    res.MatchReason = "同名图层 (强制对齐标准属性/ByLayer)";
                     res.IsSelectedForMerge = true;
                 }
                 else if (highestScore >= 80)

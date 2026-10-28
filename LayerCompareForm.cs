@@ -45,6 +45,7 @@ namespace XY_Deepening_Toolbox
         private Button btnPurgeUnused;
         private RadioButton rbShowAll;
         private RadioButton rbShowActiveOnly;
+        private Button btnPickEntity;
         private TextBox txtSearch;
         private Button btnBrowseRefDwg;
         private Button btnBrowseLin;
@@ -229,32 +230,45 @@ namespace XY_Deepening_Toolbox
             pnlFilterBar.Controls.Add(btnPurgeUnused);
 
             rbShowAll = new RadioButton();
-            rbShowAll.Text = "显示全部图层";
+            rbShowAll.Text = "全部";
             rbShowAll.Checked = true;
-            rbShowAll.Location = new Point(190, 8);
-            rbShowAll.Size = new Size(110, 22);
+            rbShowAll.Location = new Point(185, 8);
+            rbShowAll.Size = new Size(60, 22);
             rbShowAll.ForeColor = Color.FromArgb(230, 235, 245);
             rbShowAll.CheckedChanged += (s, e) => { if (rbShowAll.Checked) ApplyFilter(); };
             pnlFilterBar.Controls.Add(rbShowAll);
 
             rbShowActiveOnly = new RadioButton();
-            rbShowActiveOnly.Text = "仅显示在用图层 (隐藏空图层)";
-            rbShowActiveOnly.Location = new Point(305, 8);
-            rbShowActiveOnly.Size = new Size(195, 22);
+            rbShowActiveOnly.Text = "仅在用";
+            rbShowActiveOnly.Location = new Point(250, 8);
+            rbShowActiveOnly.Size = new Size(75, 22);
             rbShowActiveOnly.ForeColor = Color.FromArgb(97, 175, 239);
             rbShowActiveOnly.CheckedChanged += (s, e) => { if (rbShowActiveOnly.Checked) ApplyFilter(); };
             pnlFilterBar.Controls.Add(rbShowActiveOnly);
 
+            btnPickEntity = new Button();
+            btnPickEntity.Text = "🎯 图面点选实体识别";
+            btnPickEntity.Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            btnPickEntity.BackColor = Color.FromArgb(40, 80, 130);
+            btnPickEntity.ForeColor = Color.FromArgb(170, 230, 255);
+            btnPickEntity.FlatStyle = FlatStyle.Flat;
+            btnPickEntity.FlatAppearance.BorderColor = Color.FromArgb(60, 120, 180);
+            btnPickEntity.Location = new Point(335, 5);
+            btnPickEntity.Size = new Size(160, 28);
+            btnPickEntity.Cursor = Cursors.Hand;
+            btnPickEntity.Click += BtnPickEntity_Click;
+            pnlFilterBar.Controls.Add(btnPickEntity);
+
             Label lblSearch = new Label();
             lblSearch.Text = "🔍";
-            lblSearch.Location = new Point(510, 10);
+            lblSearch.Location = new Point(505, 10);
             lblSearch.Size = new Size(24, 20);
             lblSearch.ForeColor = Color.Gray;
             pnlFilterBar.Controls.Add(lblSearch);
 
             txtSearch = new TextBox();
-            txtSearch.Location = new Point(535, 7);
-            txtSearch.Size = new Size(130, 23);
+            txtSearch.Location = new Point(530, 7);
+            txtSearch.Size = new Size(120, 23);
             txtSearch.BackColor = Color.FromArgb(20, 23, 29);
             txtSearch.ForeColor = Color.White;
             txtSearch.BorderStyle = BorderStyle.FixedSingle;
@@ -277,8 +291,8 @@ namespace XY_Deepening_Toolbox
             lblRefFileStatus = new Label();
             lblRefFileStatus.Text = "未载入参考DWG";
             lblRefFileStatus.ForeColor = Color.FromArgb(150, 160, 175);
-            lblRefFileStatus.Location = new Point(pnlFilterBar.Width - 460, 9);
-            lblRefFileStatus.Size = new Size(310, 20);
+            lblRefFileStatus.Location = new Point(pnlFilterBar.Width - 440, 9);
+            lblRefFileStatus.Size = new Size(290, 20);
             lblRefFileStatus.TextAlign = ContentAlignment.MiddleRight;
             lblRefFileStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             pnlFilterBar.Controls.Add(lblRefFileStatus);
@@ -711,6 +725,7 @@ namespace XY_Deepening_Toolbox
             using (doc.LockDocument())
             {
                 MergeReport r = LayerDeepMergeService.QuickApplyLastPreset(doc.Database);
+                doc.Editor.Regen();
                 MessageBox.Show(this, r.SummaryMessage, "极速翻图结果", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 doc.Editor.UpdateScreen();
             }
@@ -872,6 +887,119 @@ namespace XY_Deepening_Toolbox
             }
         }
 
+        // ==========================================
+        // 核心交互：图面点选实体穿透识别 (定位图层/图块)
+        // ==========================================
+        private void BtnPickEntity_Click(object sender, EventArgs e)
+        {
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            this.Hide();
+            try
+            {
+                PromptNestedEntityOptions pneOpt = new PromptNestedEntityOptions("\n[XY工具箱] 请在图面上点选需要识别的实体图形 (支持嵌套块/标注/线条等): ");
+                PromptNestedEntityResult res = ed.GetNestedEntity(pneOpt);
+
+                if (res.Status == PromptStatus.OK)
+                {
+                    string pickedLayer = "";
+                    string pickedBlockName = "";
+
+                    using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
+                    {
+                        Entity ent = tr.GetObject(res.ObjectId, OpenMode.ForRead) as Entity;
+                        if (ent != null)
+                        {
+                            pickedLayer = ent.Layer;
+                        }
+
+                        ObjectId[] containers = res.GetContainers();
+                        if (containers != null && containers.Length > 0)
+                        {
+                            BlockReference br = tr.GetObject(containers[containers.Length - 1], OpenMode.ForRead) as BlockReference;
+                            if (br == null)
+                            {
+                                br = tr.GetObject(containers[0], OpenMode.ForRead) as BlockReference;
+                            }
+                            if (br != null)
+                            {
+                                pickedBlockName = LayerCompareEngine.GetEffectiveBlockName(br, tr);
+                                if (string.IsNullOrEmpty(pickedLayer))
+                                {
+                                    pickedLayer = br.Layer;
+                                }
+                            }
+                        }
+                        else if (ent is BlockReference)
+                        {
+                            BlockReference br = ent as BlockReference;
+                            pickedBlockName = LayerCompareEngine.GetEffectiveBlockName(br, tr);
+                        }
+
+                        tr.Commit();
+                    }
+
+                    this.Show();
+                    this.BringToFront();
+
+                    if (!string.IsNullOrEmpty(pickedLayer))
+                    {
+                        bool found = false;
+                        for (int i = 0; i < dgvCompare.Rows.Count; i++)
+                        {
+                            LayerMatchResult item = dgvCompare.Rows[i].Tag as LayerMatchResult;
+                            if (item != null && item.CurrentLayer.Name.Equals(pickedLayer, StringComparison.OrdinalIgnoreCase))
+                            {
+                                dgvCompare.ClearSelection();
+                                dgvCompare.Rows[i].Selected = true;
+                                dgvCompare.FirstDisplayedScrollingRowIndex = i;
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (!found)
+                        {
+                            rbShowAll.Checked = true;
+                            ApplyFilter();
+                            for (int i = 0; i < dgvCompare.Rows.Count; i++)
+                            {
+                                LayerMatchResult item = dgvCompare.Rows[i].Tag as LayerMatchResult;
+                                if (item != null && item.CurrentLayer.Name.Equals(pickedLayer, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    dgvCompare.ClearSelection();
+                                    dgvCompare.Rows[i].Selected = true;
+                                    dgvCompare.FirstDisplayedScrollingRowIndex = i;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        string infoMsg = string.Format("🎯 已成功识别并定位图面实体！\n• 实体图层: 【{0}】{1}",
+                            pickedLayer,
+                            !string.IsNullOrEmpty(pickedBlockName) ? string.Format("\n• 所属图块: 【{0}】", pickedBlockName) : "");
+
+                        lblStatus.Text = string.Format("🎯 已定位实体图层: 【{0}】{1}", pickedLayer, !string.IsNullOrEmpty(pickedBlockName) ? " (图块: " + pickedBlockName + ")" : "");
+                        MessageBox.Show(this, infoMsg, "图面实体识别成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                }
+                else
+                {
+                    this.Show();
+                    this.BringToFront();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                this.Show();
+                this.BringToFront();
+                ed.WriteMessage("\n[XY工具箱] 拾取实体失败: " + ex.Message);
+            }
+        }
+
         // 一键清理空图层
         private void BtnPurgeUnused_Click(object sender, EventArgs e)
         {
@@ -973,25 +1101,30 @@ namespace XY_Deepening_Toolbox
         // 执行全自动深度翻图合并
         private void BtnExecuteMerge_Click(object sender, EventArgs e)
         {
-            List<LayerMatchResult> selected = _allMatches.FindAll(x => x.IsSelectedForMerge && !string.IsNullOrEmpty(x.TargetLayerName) && x.TargetLayerName != x.CurrentLayer.Name);
+            List<LayerMatchResult> selected = _allMatches.FindAll(x => x.IsSelectedForMerge && !string.IsNullOrEmpty(x.TargetLayerName));
             int sameBlocksToRedefine = chkRedefineBlocks.Checked ? _blockMatches.FindAll(x => x.IsSelectedForMerge && x.IsSameNameMatched).Count : 0;
 
             if (selected.Count == 0 && sameBlocksToRedefine == 0)
             {
-                MessageBox.Show(this, "当前没有勾选需要执行合并的图层或图块项！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "当前没有勾选需要执行合并或规范化的图层/图块项！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
+            int diffMergeCount = selected.FindAll(x => !x.TargetLayerName.Equals(x.CurrentLayer.Name, StringComparison.OrdinalIgnoreCase)).Count;
+            int sameNormCount = selected.FindAll(x => x.TargetLayerName.Equals(x.CurrentLayer.Name, StringComparison.OrdinalIgnoreCase)).Count;
+
             string confirmMsg = string.Format(
                 "即将执行全自动深度穿透翻图合并：\n\n" +
-                "• 待合并图层数: {0} 个\n" +
-                "• 同名图块重定义: {1} 个 (最高优先级 · 坐标防跑偏)\n" +
-                "• 视口图层覆盖无损迁移: {2} (HB1/HB2 逻辑)\n" +
-                "• 穿透图块与嵌套块定义: {3}\n" +
-                "• 合并后物理移除源图层: {4}\n" +
-                "• 图元属性重置随层(ByLayer): {5}\n\n" +
+                "• 跨图层迁移合并: {0} 个图层\n" +
+                "• 同名图层规范化与净化: {1} 个图层\n" +
+                "• 同名图块重定义: {2} 个 (最高优先级 · 坐标防跑偏)\n" +
+                "• 视口图层覆盖无损迁移: {3} (HB1/HB2 逻辑)\n" +
+                "• 穿透图块与嵌套块定义: {4}\n" +
+                "• 合并后物理移除源图层: {5}\n" +
+                "• 图元属性重置随层(ByLayer): {6}\n\n" +
                 "是否立即开始处理？",
-                selected.Count,
+                diffMergeCount,
+                sameNormCount,
                 sameBlocksToRedefine,
                 chkMigrateVp.Checked ? "是" : "否",
                 chkDeepBlock.Checked ? "是" : "否",
@@ -1018,6 +1151,7 @@ namespace XY_Deepening_Toolbox
             using (doc.LockDocument())
             {
                 MergeReport r = LayerDeepMergeService.ExecuteDeepMerge(doc.Database, _allMatches, opts, _blockMatches);
+                doc.Editor.Regen();
                 MessageBox.Show(this, r.SummaryMessage, "深度翻图合并完毕", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 doc.Editor.UpdateScreen();
             }

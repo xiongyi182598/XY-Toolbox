@@ -34,6 +34,7 @@ namespace XY_Deepening_Toolbox
     public class MergeReport
     {
         public int TotalLayersMerged { get; set; }
+        public int TotalLayersNormalized { get; set; }
         public int TotalEntitiesProcessed { get; set; }
         public int BlocksProcessed { get; set; }
         public int BlocksRedefined { get; set; }
@@ -112,6 +113,7 @@ namespace XY_Deepening_Toolbox
                     // 2. 深度合并处理：构建映射字典 (源图层名 -> 目标标准图层名)
                     Dictionary<string, string> layerMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     Dictionary<string, LayerInfo> targetLayerDefs = new Dictionary<string, LayerInfo>(StringComparer.OrdinalIgnoreCase);
+                    HashSet<string> sameNameLayersToNormalize = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                     foreach (LayerMatchResult item in mergePlan)
                     {
@@ -119,8 +121,25 @@ namespace XY_Deepening_Toolbox
                         string src = item.CurrentLayer.Name;
                         string target = !string.IsNullOrEmpty(item.TargetLayerName) ? item.TargetLayerName : (item.BestMatchRefLayer != null ? item.BestMatchRefLayer.Name : null);
 
-                        if (string.IsNullOrEmpty(target) || string.Equals(src, target, StringComparison.OrdinalIgnoreCase))
+                        if (string.IsNullOrEmpty(target)) continue;
+
+                        // 核心修复：如果同名，决不能跳过！记录为同名属性对齐与实体净化
+                        if (string.Equals(src, target, StringComparison.OrdinalIgnoreCase))
                         {
+                            sameNameLayersToNormalize.Add(src);
+                            // 同名层也强制更新参考图的标准颜色和线型
+                            if (item.BestMatchRefLayer != null && lt.Has(src))
+                            {
+                                LayerTableRecord curLtr = (LayerTableRecord)tr.GetObject(lt[src], OpenMode.ForWrite);
+                                curLtr.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, (short)item.BestMatchRefLayer.ColorIndex);
+                                if (!string.IsNullOrEmpty(item.BestMatchRefLayer.LinetypeName) && ltt.Has(item.BestMatchRefLayer.LinetypeName))
+                                {
+                                    curLtr.LinetypeObjectId = ltt[item.BestMatchRefLayer.LinetypeName];
+                                }
+                                curLtr.LineWeight = item.BestMatchRefLayer.LineWeightValue;
+                                curLtr.IsPlottable = item.BestMatchRefLayer.IsPlottable;
+                                report.TotalLayersNormalized++;
+                            }
                             continue;
                         }
 
@@ -131,7 +150,7 @@ namespace XY_Deepening_Toolbox
                         }
                     }
 
-                    // 确保所有目标标准图层在当前图中存在（若不存在则自动新建并赋予标准属性）
+                    // 确保所有跨层合并的目标标准图层在当前图中存在（若不存在则自动新建并赋予标准属性）
                     foreach (var kvp in targetLayerDefs)
                     {
                         string targetName = kvp.Key;
@@ -171,7 +190,7 @@ namespace XY_Deepening_Toolbox
 
                     // 3. 采用 HB1/HB2 逻辑：视口属性深度全量继承 (冻结/解冻 + 覆盖字典克隆无损转移)
                     int viewportsCount = 0;
-                    if (options.MigrateViewportOverrides)
+                    if (options.MigrateViewportOverrides && layerMap.Count > 0)
                     {
                         try
                         {
@@ -290,7 +309,7 @@ namespace XY_Deepening_Toolbox
                     }
                     report.ViewportsProcessed = viewportsCount;
 
-                    // 4. 【核心特性】：相同图块名称优先级最高合并 (重定义块定义与实例图层归正)
+                    // 4. 【核心特性】：相同图块名称优先级最高合并 (重定义块定义 + 通知块实例图形缓存刷新)
                     int redefinedBlocksCount = 0;
                     if (options.RedefineSameNameBlocks && !string.IsNullOrEmpty(options.RefDwgPath) && File.Exists(options.RefDwgPath))
                     {
@@ -298,7 +317,10 @@ namespace XY_Deepening_Toolbox
                     }
                     report.BlocksRedefined = redefinedBlocksCount;
 
-                    // 5. 采用 HB1/HB2 逻辑：全图极速穿透处理图元 (净化 ByLayer + 块属性穿透)
+                    // 5. 采用 HB1/HB2 逻辑：全图极速穿透处理图元 (改层 + 净化 ByLayer + 块属性文字净化)
+                    HashSet<string> allLayersToProcess = new HashSet<string>(layerMap.Keys, StringComparer.OrdinalIgnoreCase);
+                    foreach (string lay in sameNameLayersToNormalize) allLayersToProcess.Add(lay);
+
                     BlockTable btAll = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                     int entitiesCount = 0;
                     int blocksCount = 0;
@@ -320,13 +342,22 @@ namespace XY_Deepening_Toolbox
                             try
                             {
                                 Entity ent = tr.GetObject(entId, OpenMode.ForRead) as Entity;
-                                if (ent != null && layerMap.ContainsKey(ent.Layer))
-                                {
-                                    string targetLayer = layerMap[ent.Layer];
-                                    ent.UpgradeOpen();
-                                    ent.Layer = targetLayer;
+                                if (ent == null) continue;
 
-                                    // 净化为 ByLayer
+                                string curLay = ent.Layer;
+                                bool needLayerMigration = layerMap.ContainsKey(curLay);
+                                bool needNormalization = allLayersToProcess.Contains(curLay);
+
+                                if (needLayerMigration || needNormalization)
+                                {
+                                    ent.UpgradeOpen();
+
+                                    if (needLayerMigration)
+                                    {
+                                        ent.Layer = layerMap[curLay];
+                                    }
+
+                                    // 核心：强制净化为 ByLayer
                                     if (options.ResetEntitiesByLayer)
                                     {
                                         ent.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByLayer, 256);
@@ -363,7 +394,7 @@ namespace XY_Deepening_Toolbox
                     report.BlocksProcessed = blocksCount;
 
                     // 6. 采用 HB1/HB2 逻辑：物理安全抹除源图层 (Erase 物理清除)
-                    if (options.PurgeSourceLayersAfterMerge)
+                    if (options.PurgeSourceLayersAfterMerge && layerMap.Count > 0)
                     {
                         foreach (var kvp in layerMap)
                         {
@@ -389,6 +420,19 @@ namespace XY_Deepening_Toolbox
                     tr.Commit();
                 }
 
+                // 核心关键：事务提交后强制全图 Regen 重生成，彻底刷新显示缓存，让图块和颜色瞬间在屏幕上生效！
+                if (doc != null)
+                {
+                    try
+                    {
+                        doc.Editor.Regen();
+                    }
+                    catch
+                    {
+                        doc.Editor.UpdateScreen();
+                    }
+                }
+
                 // 7. 自动持久化记忆最后一次翻图方案 (供后续多套图纸一键复用)
                 FlipRulePreset lastPreset = new FlipRulePreset();
                 lastPreset.RefDwgPath = options.RefDwgPath;
@@ -400,7 +444,7 @@ namespace XY_Deepening_Toolbox
 
                 foreach (var item in mergePlan)
                 {
-                    if (item.IsSelectedForMerge && !string.IsNullOrEmpty(item.TargetLayerName) && item.TargetLayerName != item.CurrentLayer.Name)
+                    if (item.IsSelectedForMerge && !string.IsNullOrEmpty(item.TargetLayerName))
                     {
                         lastPreset.LayerMappings[item.CurrentLayer.Name] = item.TargetLayerName;
                     }
@@ -431,19 +475,21 @@ namespace XY_Deepening_Toolbox
 
             report.SummaryMessage = string.Format(
                 "★ [XY工具箱] 全自动深度翻图合并成功！\n" +
-                "• 穿透迁移业务图层: {0} 个\n" +
-                "• 重定义同名图块: {1} 个 (最高优先级)\n" +
-                "• 穿透处理图元: {2} 个 (含 {3} 个块定义与 {4} 个视口覆盖)\n" +
-                "• 物理清理旧图层: {5} 个\n" +
-                "• 本次规则已自动持久化记忆，后续图纸可直接一键秒翻！耗时: {6} ms",
-                report.TotalLayersMerged, report.BlocksRedefined, report.TotalEntitiesProcessed,
-                report.BlocksProcessed, report.ViewportsProcessed, report.SourceLayersPurged, report.ElapsedMilliseconds);
+                "• 跨层迁移合并: {0} 个图层\n" +
+                "• 同名规范对齐: {1} 个图层 (属性与ByLayer净化已强制生效)\n" +
+                "• 重定义同名图块: {2} 个 (最高优先级 · 图形显存已刷新)\n" +
+                "• 穿透处理图元: {3} 个 (含 {4} 个块定义与 {5} 个视口覆盖)\n" +
+                "• 物理清理旧图层: {6} 个\n" +
+                "• 耗时: {7} ms (已自动持久化记忆，后续图纸可直接敲 XFT 秒翻)",
+                report.TotalLayersMerged, report.TotalLayersNormalized, report.BlocksRedefined,
+                report.TotalEntitiesProcessed, report.BlocksProcessed, report.ViewportsProcessed,
+                report.SourceLayersPurged, report.ElapsedMilliseconds);
 
             return report;
         }
 
         /// <summary>
-        /// 同名图块最高优先级重定义 (从参考图纸中克隆同名母块，并保持图面位置防跑偏)
+        /// 同名图块最高优先级重定义 (从参考图纸中克隆同名母块，通知实例刷新显存)
         /// </summary>
         private static int ExecuteSameNameBlockRedefinition(Database targetDb, Transaction trTarget, string refDwgPath, List<BlockMatchInfo> blockMatches)
         {
@@ -482,7 +528,6 @@ namespace XY_Deepening_Toolbox
 
                         if (btTarget.Has(blkName))
                         {
-                            // 目标图中存在同名块，进行子图元深层重定义
                             BlockTableRecord targetBtr = (BlockTableRecord)trTarget.GetObject(btTarget[blkName], OpenMode.ForWrite);
 
                             // 1. 清空当前块内已有子图元
@@ -508,6 +553,18 @@ namespace XY_Deepening_Toolbox
                                 IdMapping idMap = new IdMapping();
                                 refDb.WblockCloneObjects(idsToClone, targetBtr.ObjectId, idMap, DuplicateRecordCloning.Replace, false);
                             }
+
+                            // 3. 关键：通知图面上所有引用该块的实例重绘
+                            try
+                            {
+                                ObjectIdCollection brIds = targetBtr.GetBlockReferenceIds(true, true);
+                                foreach (ObjectId brId in brIds)
+                                {
+                                    Entity brEnt = trTarget.GetObject(brId, OpenMode.ForWrite) as Entity;
+                                    if (brEnt != null) brEnt.RecordGraphicsModified(true);
+                                }
+                            }
+                            catch { }
 
                             count++;
                         }
