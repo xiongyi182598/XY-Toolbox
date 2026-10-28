@@ -44,7 +44,7 @@ proxy_handler = urllib.request.ProxyHandler({'http': 'socks5h://127.0.0.1:10808'
 opener = urllib.request.build_opener(proxy_handler)
 
 REPO = "xiongyi182598/XY-Toolbox"
-TAG = "v1.0.3"
+TAG = "v1.0.4"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(BASE_DIR, "发布成果物")
 

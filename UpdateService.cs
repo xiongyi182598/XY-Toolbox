@@ -42,8 +42,8 @@ namespace XY_Toolbox
     public static class UpdateService
     {
         // 本地当前版本常量
-        public const string CURRENT_VERSION = "1.0.3";
-        public const int CURRENT_VERSION_CODE = 103;
+        public const string CURRENT_VERSION = "1.0.4";
+        public const int CURRENT_VERSION_CODE = 104;
         public const string GITHUB_REPO_URL = "https://github.com/xiongyi182598/XY-Toolbox";
 
         // 多镜像版本信息地址源（优先国内加速通道）
@@ -756,7 +756,7 @@ namespace XY_Toolbox
                                  "timeout /t 1 /nobreak >nul\r\n" +
                                  "taskkill /f /im acad.exe >nul 2>&1\r\n" +
                                  "timeout /t 1 /nobreak >nul\r\n" +
-                                 "copy /y pending_update\\*.dll . >nul 2>&1\r\n" +
+                                 "copy /y pending_update\\*.* . >nul 2>&1\r\n" +
                                  "rd /s /q pending_update >nul 2>&1\r\n" +
                                  "if exist apply_update.bat del /f /q apply_update.bat >nul 2>&1\r\n" +
                                  "if exist run_updater.bat del /f /q run_updater.bat >nul 2>&1\r\n" +
