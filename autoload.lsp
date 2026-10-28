@@ -44,7 +44,7 @@
 
 ;; 核心机制：在尚未加载任何 DLL 前，自动检测并无感应用在线更新暂存包 (双保险闭环)
 (vl-catch-all-apply
-  '(lambda ( / dir pend-dll target-dll pend-dir bat-f )
+  '(lambda ( / dir pend-dll target-dll bat-f )
      (setq dir (xy:get-toolbox-dir))
      (if (and dir (/= dir ""))
        (progn
@@ -52,11 +52,19 @@
          (setq target-dll (strcat dir "/XY_Toolbox.dll"))
          (if (findfile pend-dll)
            (progn
-             (vl-file-copy pend-dll target-dll nil)
-             (vl-file-delete pend-dll)
-             (setq bat-f (strcat dir "/apply_update.bat"))
-             (if (findfile bat-f) (vl-file-delete bat-f))
-             (princ "\n★ [XY工具箱] 已成功无感完成核心组件最新版本升级！\n")
+             ;; AutoLISP 规则：vl-file-copy 遇到已存在的目标文件会直接返回 nil 拒绝覆盖
+             ;; 必须先安全删除目标文件，再复制，确保 100% 真正物理覆盖
+             (if (findfile target-dll)
+               (vl-file-delete target-dll)
+             )
+             (if (vl-file-copy pend-dll target-dll)
+               (progn
+                 (vl-file-delete pend-dll)
+                 (setq bat-f (strcat dir "/apply_update.bat"))
+                 (if (findfile bat-f) (vl-file-delete bat-f))
+                 (princ "\n★ [XY工具箱] 已成功无感完成核心组件最新版本物理升级！\n")
+               )
+             )
            )
          )
        )
