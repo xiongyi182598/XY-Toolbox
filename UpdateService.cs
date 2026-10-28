@@ -47,12 +47,17 @@ namespace XY_Toolbox
         public const string GITHUB_REPO_URL = "https://github.com/xiongyi182598/XY-Toolbox";
 
         // 多镜像版本信息地址源（优先国内加速通道）
+        // 多镜像版本信息地址源（全面覆盖国内最稳定的各大加速镜像节点）
         private static readonly string[] VersionEndpoints = new string[]
         {
-            "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
-            "https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://raw.gitmirror.com/xiongyi182598/XY-Toolbox/main/version.json",
             "https://cdn.jsdelivr.net/gh/xiongyi182598/XY-Toolbox@main/version.json",
-            "https://ghproxy.net/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json"
+            "https://fastly.jsdelivr.net/gh/xiongyi182598/XY-Toolbox@main/version.json",
+            "https://gcore.jsdelivr.net/gh/xiongyi182598/XY-Toolbox@main/version.json",
+            "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://ghproxy.net/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://mirror.ghproxy.com/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json",
+            "https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json"
         };
 
         private static bool _hasPromptedSilentUpdate = false;
@@ -83,7 +88,7 @@ namespace XY_Toolbox
                     {
                         if (!silent)
                         {
-                            ShowMessageOnMainThread("检查更新失败", "暂时无法连接到云端版本服务器，请检查网络或稍后再试。\n您也可直接访问官方 GitHub 仓库页面下载最新发布包。");
+                            ShowUpdateFailureDialog();
                         }
                         return;
                     }
@@ -125,37 +130,115 @@ namespace XY_Toolbox
         }
 
         /// <summary>
-        /// 遍历多线路获取最新版本元数据
+        /// 遍历多线路获取最新版本元数据 (带代理死锁自动脱困机制)
         /// </summary>
         public static RemoteVersionInfo FetchRemoteVersionInfo()
         {
             foreach (string url in VersionEndpoints)
             {
-                try
+                string json = HttpGetWithFallback(url);
+                if (!string.IsNullOrEmpty(json))
                 {
-                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-                    request.Timeout = 4000;
-                    request.ReadWriteTimeout = 4000;
-                    request.UserAgent = "XY_Toolbox_Updater/1.0";
-
-                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                    using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                    RemoteVersionInfo info = ParseVersionJson(json);
+                    if (info != null && !string.IsNullOrEmpty(info.Version))
                     {
-                        string json = reader.ReadToEnd();
-                        RemoteVersionInfo info = ParseVersionJson(json);
-                        if (info != null && !string.IsNullOrEmpty(info.Version))
-                        {
-                            return info;
-                        }
+                        return info;
                     }
-                }
-                catch
-                {
-                    // 当前节点失败，自动轮询下一线路
-                    continue;
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// 极速带容灾的 HTTP GET 请求，双重测试系统代理与纯直连模式，防止本地代理死锁
+        /// </summary>
+        private static string HttpGetWithFallback(string url)
+        {
+            // 尝试 1：常规请求
+            try
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Timeout = 3000;
+                req.ReadWriteTimeout = 3000;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) XY_Toolbox_Updater/1.0";
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (StreamReader reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+            catch { }
+
+            // 尝试 2：强制 Bypass 本地无效或残留代理配置，纯粹裸连直通
+            try
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Proxy = null;
+                req.Timeout = 3000;
+                req.ReadWriteTimeout = 3000;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) XY_Toolbox_Updater/1.0";
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (StreamReader reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static void ShowUpdateFailureDialog()
+        {
+            try
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage(
+                    "\n[XY工具箱] 无法直连版本服务器，您可访问官方页面: " + GITHUB_REPO_URL + "\n");
+            }
+            catch { }
+
+            Form dlg = new Form();
+            dlg.Text = "检查更新提示";
+            dlg.Size = new Size(420, 210);
+            dlg.StartPosition = FormStartPosition.CenterScreen;
+            dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+            dlg.MaximizeBox = false;
+            dlg.MinimizeBox = false;
+            dlg.BackColor = Color.FromArgb(28, 32, 40);
+            dlg.ForeColor = Color.White;
+
+            Label lbl = new Label();
+            lbl.Text = "暂时无法连接到云端版本服务器（可能受限于国内网络环境）。\n\n您可以直接前往官方 GitHub 仓库页面下载最新发布包。";
+            lbl.Location = new Point(25, 25);
+            lbl.Size = new Size(360, 65);
+            lbl.Font = new Font("SimSun", 9F, FontStyle.Regular);
+            lbl.ForeColor = Color.FromArgb(230, 235, 245);
+            dlg.Controls.Add(lbl);
+
+            Button btnOpen = new Button();
+            btnOpen.Text = "访问 GitHub 页面";
+            btnOpen.Location = new Point(110, 115);
+            btnOpen.Size = new Size(150, 32);
+            btnOpen.BackColor = Color.FromArgb(40, 110, 220);
+            btnOpen.ForeColor = Color.White;
+            btnOpen.FlatStyle = FlatStyle.Flat;
+            btnOpen.Click += (s, e) => {
+                try { Process.Start(GITHUB_REPO_URL + "/releases"); } catch { }
+                dlg.Close();
+            };
+            dlg.Controls.Add(btnOpen);
+
+            Button btnCancel = new Button();
+            btnCancel.Text = "关闭";
+            btnCancel.Location = new Point(280, 115);
+            btnCancel.Size = new Size(90, 32);
+            btnCancel.BackColor = Color.FromArgb(50, 56, 68);
+            btnCancel.ForeColor = Color.White;
+            btnCancel.FlatStyle = FlatStyle.Flat;
+            btnCancel.Click += (s, e) => dlg.Close();
+            dlg.Controls.Add(btnCancel);
+
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(dlg);
         }
 
         /// <summary>
@@ -429,15 +512,20 @@ namespace XY_Toolbox
             Directory.CreateDirectory(tempDir);
             string zipPath = Path.Combine(tempDir, "update.zip");
 
-            // 智能下载线路候选（首选 ghfast 国内加速）
+            // 智能下载线路候选（多镜像国内高速竞速）
             List<string> candidateUrls = new List<string>();
-            if (!string.IsNullOrEmpty(_info.DownloadUrl))
+            string rawUrl = _info.DownloadUrl;
+            if (!string.IsNullOrEmpty(rawUrl))
             {
-                if (!_info.DownloadUrl.Contains("ghfast.top") && _info.DownloadUrl.StartsWith("https://github.com/"))
+                if (rawUrl.StartsWith("https://github.com/"))
                 {
-                    candidateUrls.Add("https://ghfast.top/" + _info.DownloadUrl);
+                    candidateUrls.Add("https://ghfast.top/" + rawUrl);
+                    candidateUrls.Add("https://mirror.ghproxy.com/" + rawUrl);
+                    candidateUrls.Add("https://ghproxy.net/" + rawUrl);
+                    candidateUrls.Add("https://gh-proxy.com/" + rawUrl);
+                    candidateUrls.Add("https://github.moeyy.xyz/" + rawUrl);
                 }
-                candidateUrls.Add(_info.DownloadUrl);
+                candidateUrls.Add(rawUrl);
             }
 
             Task.Factory.StartNew(() =>
@@ -454,7 +542,8 @@ namespace XY_Toolbox
 
                         using (_webClient = new WebClient())
                         {
-                            _webClient.Headers.Add("User-Agent", "XY_Toolbox_Updater/1.0");
+                            _webClient.Proxy = null; // 关键：防代理卡死
+                            _webClient.Headers.Add("User-Agent", "Mozilla/5.0 XY_Toolbox_Updater/1.0");
                             _webClient.DownloadProgressChanged += (s, pe) =>
                             {
                                 try
