@@ -1,57 +1,52 @@
 @echo off
-chcp 65001 >nul 2>&1
-title XYå·¥å…·ç®± - ä¸€é”®å…¨è‡ªåŠ¨å‡çº§ä¸Žä¿®å¤å·¥å…·
+chcp 936 >nul 2>&1
+title XY¹¤¾ßÏä - Ò»¼üÈ«×Ô¶¯Éý¼¶ÓëÐÞ¸´¹¤¾ß
 color 0b
 
 echo ========================================================
-echo   XYå·¥å…·ç®± Â· ä¸€é”®å…¨è‡ªåŠ¨æžé€Ÿå‡çº§ä¸Žä¿®å¤ç¨‹åº
+echo   XY¹¤¾ßÏä ¡¤ Ò»¼üÈ«×Ô¶¯¼«ËÙÉý¼¶ÓëÐÞ¸´³ÌÐò
 echo ========================================================
 echo.
 
-echo [*] æ­£åœ¨å®‰å…¨è§£é™¤ AutoCAD è¿›ç¨‹å ç”¨ä¸Žæ ¸å¿ƒæ–‡ä»¶é”...
+echo [*] ÕýÔÚ°²È«½â³ý AutoCAD ½ø³ÌÕ¼ÓÃÓëºËÐÄÎÄ¼þËø...
 taskkill /f /im acad.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
 
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
-set "APPLIED=0"
+set APPLIED=0
 
-:: æ£€æŸ¥æœ¬åœ°æ˜¯å¦å­˜åœ¨å·²ä¸‹è½½çš„æš‚å­˜æ›´æ–°åŒ…
 if exist "pending_update\XY_Toolbox.dll" (
-    echo [*] å‘çŽ°å·²å°±ç»ªçš„æœ€æ–°æ›´æ–°åŒ…ï¼Œæ­£åœ¨æ‰§è¡Œç‰©ç†è¦†ç›–...
-    copy /y "pending_update\*.dll" . >nul 2>&1
-    copy /y "pending_update\*.lsp" . >nul 2>&1
+    echo [*] ·¢ÏÖÒÑ¾ÍÐ÷µÄ×îÐÂ¸üÐÂ°ü£¬ÕýÔÚÖ´ÐÐÎïÀí¸²¸Ç...
+    copy /y "pending_update\*.*" "." >nul 2>&1
     rd /s /q "pending_update" >nul 2>&1
-    set "APPLIED=1"
+    set APPLIED=1
 )
 
-:: å¦‚æžœæ²¡æœ‰æš‚å­˜åŒ…ï¼Œç›´æŽ¥ä»Žå›½å†…é«˜é€Ÿé•œåƒæ‹‰å–æœ€æ–° DLL
 if "%APPLIED%"=="0" (
-    echo [*] æ­£åœ¨ä»Žå›½å†…é«˜é€ŸèŠ‚ç‚¹åŒæ­¥æœ€æ–° v1.0.2 æ ¸å¿ƒç»„ä»¶...
-    curl.exe -s -k -L --connect-timeout 8 -o "XY_Toolbox.dll" "https://mirror.ghproxy.com/https://github.com/xiongyi182598/XY-Toolbox/raw/main/XY_Toolbox.dll"
-    if not exist "XY_Toolbox.dll" (
-        curl.exe -s -k -L --connect-timeout 8 -o "XY_Toolbox.dll" "https://ghfast.top/https://github.com/xiongyi182598/XY-Toolbox/raw/main/XY_Toolbox.dll"
-    )
-    curl.exe -s -k -L --connect-timeout 8 -o "autoload.lsp" "https://mirror.ghproxy.com/https://github.com/xiongyi182598/XY-Toolbox/raw/main/autoload.lsp"
+    echo [*] ÕýÔÚ´Ó¸ßËÙÔÆ¶ËÍ¬²½×îÐÂ v1.0.3 ºËÐÄ×é¼þ...
+    curl.exe -s -k -L --connect-timeout 10 -o "XY_Toolbox.dll" "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/XY_Toolbox.dll"
+    curl.exe -s -k -L --connect-timeout 10 -o "autoload.lsp" "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/autoload.lsp"
+    curl.exe -s -k -L --connect-timeout 10 -o "version.json" "https://ghfast.top/https://raw.githubusercontent.com/xiongyi182598/XY-Toolbox/main/version.json"
 )
 
-:: æ¸…ç†å¤šä½™ä¸´æ—¶æ–‡ä»¶
 if exist "apply_update.bat" del /f /q "apply_update.bat" >nul 2>&1
 if exist "run_updater.bat" del /f /q "run_updater.bat" >nul 2>&1
 if exist "restart_apply.bat" del /f /q "restart_apply.bat" >nul 2>&1
 
 echo.
 echo ========================================================
-echo  [OK] æ­å–œï¼XYå·¥å…·ç®±å·²å½»åº•æ— æ„Ÿå‡çº§ä¸ºæœ€æ–° v1.0.2 æ­£å¼ç‰ˆï¼
-echo  - ä¾§è¾¹æ åœé é˜²å´©æºƒã€å¸é™„å†²çªå·²å½»åº•æ ¹æ²»
-echo  - æ™ºèƒ½è¾“å…¥æ³•åˆ‡æ¢ä¿æŒçº¯è‹±æ–‡ç›²æ‰“ï¼Œç»ä¸å†è¯¯åˆ‡ä¸­æ–‡
-echo  - ç¨‹åºé‡è½½ (XCZ) é¡ºæ»‘å¯ç”¨ï¼Œç»ä¸å†æŠ¥é”™
+echo  [OK] ¹§Ï²£¡XY¹¤¾ßÏäÒÑ³¹µ×ÎÞ¸ÐÉý¼¶Îª×îÐÂ v1.0.3 ÕýÊ½°æ£¡
+echo  - ²à±ßÀ¸Óë¹¤×÷Ì¨±êÌâÑÏ¸ñ¶ÔÆëÈýÎ»Êý°æ±¾ºÅ£ºXY¹¤¾ßÏä v1.0.3
+echo  - ÖÇÄÜÊäÈë·¨ÇÐ»»±£³Ö´¿Ó¢ÎÄÃ¤´ò£¬ÊäÈëÎÄ×Ö×Ô¶¯ÇÐÖÐÎÄ
+echo  - ÐÞ¸´Ó°×Ó¼ÓÔØ»úÖÆ£¬³¹µ×Ïû³ýÉý¼¶ÎÄ¼þËøËÀ
 echo ========================================================
 echo.
 
-:: è‡ªåŠ¨æŸ¥æ‰¾ AutoCAD è·¯å¾„å¹¶é‡æ–°æ‹‰èµ·
 set "ACAD_EXE="
+if exist "C:\Program Files\Autodesk\AutoCAD 2026\acad.exe" set "ACAD_EXE=C:\Program Files\Autodesk\AutoCAD 2026\acad.exe"
+if exist "C:\Program Files\Autodesk\AutoCAD 2025\acad.exe" set "ACAD_EXE=C:\Program Files\Autodesk\AutoCAD 2025\acad.exe"
 if exist "C:\Program Files\Autodesk\AutoCAD 2024\acad.exe" set "ACAD_EXE=C:\Program Files\Autodesk\AutoCAD 2024\acad.exe"
 if exist "C:\Program Files\Autodesk\AutoCAD 2023\acad.exe" set "ACAD_EXE=C:\Program Files\Autodesk\AutoCAD 2023\acad.exe"
 if exist "C:\Program Files\Autodesk\AutoCAD 2022\acad.exe" set "ACAD_EXE=C:\Program Files\Autodesk\AutoCAD 2022\acad.exe"
@@ -59,10 +54,10 @@ if exist "C:\Program Files\Autodesk\AutoCAD 2021\acad.exe" set "ACAD_EXE=C:\Prog
 if exist "C:\Program Files\Autodesk\AutoCAD 2020\acad.exe" set "ACAD_EXE=C:\Program Files\Autodesk\AutoCAD 2020\acad.exe"
 
 if defined ACAD_EXE (
-    echo [*] æ­£åœ¨ä¸ºæ‚¨é‡æ–°å¯åŠ¨ AutoCAD...
+    echo [*] ÕýÔÚÎªÄúÖØÐÂÆô¶¯ AutoCAD...
     start "" "%ACAD_EXE%"
 ) else (
-    echo [*] å‡çº§å®Œæˆï¼è¯·ç›´æŽ¥å¯åŠ¨ AutoCAD å³å¯äº«å—å…¨æ–°ç‰ˆæœ¬ï¼
+    echo [*] Éý¼¶Íê³É£¡ÇëÖ±½ÓÆô¶¯ AutoCAD ¼´¿ÉÏíÊÜÈ«ÐÂ°æ±¾£¡
 )
 
 timeout /t 3 /nobreak >nul
