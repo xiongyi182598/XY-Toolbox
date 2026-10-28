@@ -1,13 +1,13 @@
 {
-  "version": "1.0.2",
-  "version_code": 102,
+  "version": "1.0.3",
+  "version_code": 103,
   "release_date": "2026-10-28",
-  "title": "XY工具箱 v1.0.2 稳定正式版",
+  "title": "XY工具箱 v1.0.3 输入法智能自动切换全新版",
   "changelog": [
-    "1. 彻底解决 AutoCAD 2024 与天正建筑 T30 下 XGJ 致命错误 (Access Violation)；",
-    "2. 完美恢复侧边栏原生吸附与停靠功能，支持左右停靠与自动隐藏；",
-    "3. 彻底根除输入法智能切换 Bug：输入快捷键命令 100% 保持纯英文半角，绝不误弹拼音框；",
-    "4. 升级在线更新服务：支持国内全网 8 大高速镜像与防本地代理死锁。"
+    "1. 【重磅突破】深度复刻老李视频神仙功能：画图/输命令100%纯英文盲打，写字改字自动秒变中文，退出秒变回英文；",
+    "2. 彻底移除后台高频Idle压制，文字编辑过程绝不锁死英文，提笔即出汉字；",
+    "3. 全面覆盖多行文字(T/MT)、单行文字(DT)、文字修改(ED)、天正文字(WZ/DZ)及属性标注；",
+    "4. 在线更新增加全自动一键重启CAD并置换升级闭环，零手工操作。"
   ],
   "download_url": "https://github.com/xiongyi182598/XY-Toolbox/releases/latest/download/XY_Toolbox_Update.zip",
   "min_cad_version": "2020"
