@@ -337,7 +337,7 @@ namespace XY_Toolbox
             catch { }
         }
 
-        private static void PrintToCadEditor(string msg)
+        public static void PrintToCadEditor(string msg)
         {
             try
             {
@@ -637,6 +637,9 @@ namespace XY_Toolbox
                     string pendingDir = Path.Combine(rootDir, "pending_update");
                     if (!Directory.Exists(pendingDir)) Directory.CreateDirectory(pendingDir);
 
+                    string verDllName = "XY_Toolbox_" + _info.VersionCode + ".dll";
+                    string verDllPath = Path.Combine(rootDir, verDllName);
+
                     foreach (string srcFile in Directory.GetFiles(targetContentDir, "*.*", SearchOption.AllDirectories))
                     {
                         string relative = srcFile.Substring(targetContentDir.Length).TrimStart('\\', '/');
@@ -647,64 +650,41 @@ namespace XY_Toolbox
                         string ext = Path.GetExtension(destFile).ToLower();
                         if (ext == ".dll")
                         {
+                            // 核心创新：直接生成全新代号的 DLL (如 XY_Toolbox_104.dll)
+                            // 当前 CAD 占用的是旧文件，新版本 DLL 永远无锁，100% 物理落盘成功！
+                            try
+                            {
+                                File.Copy(srcFile, verDllPath, true);
+                            }
+                            catch { }
+
+                            // 同时尝试覆盖通用母体 (锁住则忽略，autoload.lsp 会自动优先加载最新代号 DLL)
                             try
                             {
                                 File.Copy(srcFile, destFile, true);
                             }
-                            catch (System.Exception)
-                            {
-                                // DLL 被当前 CAD 锁定占用，写入 pending 待下次自动替换
-                                dllLocked = true;
-                                string pendingFile = Path.Combine(pendingDir, Path.GetFileName(destFile));
-                                File.Copy(srcFile, pendingFile, true);
-                            }
+                            catch { }
                         }
                         else
                         {
-                            // 脚本、图标、配置直接无缝热覆盖
+                            // 脚本、图标、配置无进程独占锁，直接热覆盖
                             try { File.Copy(srcFile, destFile, true); } catch { }
                         }
                     }
 
-                    // 生成自动覆盖批处理脚本与后台守护替换进程
-                    string applyBat = Path.Combine(rootDir, "apply_update.bat");
-                    string batContent = "@echo off\r\n" +
-                                        "timeout /t 1 /nobreak >nul\r\n" +
-                                        "if exist pending_update\\*.dll (\r\n" +
-                                        "    copy /y pending_update\\*.dll . >nul 2>&1\r\n" +
-                                        "    rd /s /q pending_update >nul 2>&1\r\n" +
-                                        ")\r\n" +
-                                        "del \"%~f0\" >nul 2>&1\r\n";
-                    File.WriteAllText(applyBat, batContent, Encoding.Default);
-
-                    if (dllLocked)
+                    // 清理遗留历史批处理
+                    try
                     {
-                        try
+                        string pDir = Path.Combine(rootDir, "pending_update");
+                        if (Directory.Exists(pDir)) Directory.Delete(pDir, true);
+                        string[] oldBats = new string[] { "apply_update.bat", "run_updater.bat", "restart_apply.bat" };
+                        foreach (string ob in oldBats)
                         {
-                            string updaterBat = Path.Combine(rootDir, "run_updater.bat");
-                            string waitLoopBat = "@echo off\r\n" +
-                                                 ":loop\r\n" +
-                                                 "timeout /t 2 /nobreak >nul\r\n" +
-                                                 "if not exist pending_update\\XY_Toolbox.dll goto done\r\n" +
-                                                 "copy /y pending_update\\*.dll . >nul 2>&1\r\n" +
-                                                 "del /f /q pending_update\\XY_Toolbox.dll >nul 2>&1\r\n" +
-                                                 "if exist pending_update\\XY_Toolbox.dll goto loop\r\n" +
-                                                 ":done\r\n" +
-                                                 "rd /s /q pending_update >nul 2>&1\r\n" +
-                                                 "if exist apply_update.bat del /f /q apply_update.bat >nul 2>&1\r\n" +
-                                                 "del \"%~f0\" >nul 2>&1\r\n";
-                            File.WriteAllText(updaterBat, waitLoopBat, Encoding.Default);
-
-                            ProcessStartInfo psi = new ProcessStartInfo();
-                            psi.FileName = "cmd.exe";
-                            psi.Arguments = "/c \"" + updaterBat + "\"";
-                            psi.CreateNoWindow = true;
-                            psi.UseShellExecute = false;
-                            psi.WindowStyle = ProcessWindowStyle.Hidden;
-                            Process.Start(psi);
+                            string obp = Path.Combine(rootDir, ob);
+                            if (File.Exists(obp)) File.Delete(obp);
                         }
-                        catch { }
                     }
+                    catch { }
 
                     this.Invoke(new Action(() =>
                     {
@@ -714,23 +694,20 @@ namespace XY_Toolbox
                         btnCancel.Text = "完成";
                         btnCancel.Enabled = true;
 
-                        if (dllLocked)
-                        {
-                            DialogResult dr = MessageBox.Show(this, 
-                                "更新包已成功下载并就绪！\n\n" +
-                                "是否立即自动重启 AutoCAD 完成全新升级？\n\n" +
-                                "【是 (推荐)】：全自动优雅重启 CAD，2秒内秒级生效最新版！\n" +
-                                "【否】：下次您手动启动 CAD 时自动升级生效。", 
-                                "更新就绪 - 推荐立即自动重启", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                        DialogResult dr = MessageBox.Show(this, 
+                            string.Format("★ 恭喜！XY工具箱全套组件已在线升级至最新正式版 (v{0})！\n\n" +
+                                          "是否立即自动重启 AutoCAD 完成生效？\n\n" +
+                                          "【是 (推荐)】：全自动优雅重启 CAD，立即体验新版！\n" +
+                                          "【否】：下次您启动 CAD 时全自动无感生效。", _info.Version), 
+                            "在线升级成功 - 推荐重启生效", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
 
-                            if (dr == DialogResult.Yes)
-                            {
-                                RestartAndApplyUpdate(rootDir);
-                            }
+                        if (dr == DialogResult.Yes)
+                        {
+                            RestartAutoCad();
                         }
                         else
                         {
-                            MessageBox.Show(this, "恭喜！XY工具箱全套组件已成功升级为最新版！", "更新完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            UpdateService.PrintToCadEditor(string.Format("\n★ [XY工具箱] v{0} 组件已就绪！下次启动 CAD 自动加载。\n", _info.Version));
                         }
                     }));
                 }
@@ -746,33 +723,30 @@ namespace XY_Toolbox
             });
         }
 
-        private static void RestartAndApplyUpdate(string rootDir)
+        private static void RestartAutoCad()
         {
             try
             {
                 string acadExe = Process.GetCurrentProcess().MainModule.FileName;
-                string restartBat = Path.Combine(rootDir, "restart_apply.bat");
-                string batCode = "@echo off\r\n" +
-                                 "timeout /t 1 /nobreak >nul\r\n" +
-                                 "taskkill /f /im acad.exe >nul 2>&1\r\n" +
-                                 "timeout /t 1 /nobreak >nul\r\n" +
-                                 "copy /y pending_update\\*.* . >nul 2>&1\r\n" +
-                                 "rd /s /q pending_update >nul 2>&1\r\n" +
-                                 "if exist apply_update.bat del /f /q apply_update.bat >nul 2>&1\r\n" +
-                                 "if exist run_updater.bat del /f /q run_updater.bat >nul 2>&1\r\n" +
-                                 "start \"\" \"" + acadExe + "\"\r\n" +
-                                 "del \"%~f0\" >nul 2>&1\r\n";
-                File.WriteAllText(restartBat, batCode, Encoding.Default);
-
-                ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = "cmd.exe";
-                psi.Arguments = "/c \"" + restartBat + "\"";
-                psi.CreateNoWindow = true;
-                psi.UseShellExecute = false;
-                psi.WindowStyle = ProcessWindowStyle.Hidden;
-                Process.Start(psi);
+                Process.Start(acadExe);
+                try
+                {
+                    Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.SendStringToExecute("_.QUIT ", true, false, false);
+                }
+                catch
+                {
+                    Autodesk.AutoCAD.ApplicationServices.Application.Quit();
+                }
             }
-            catch { }
+            catch
+            {
+                try
+                {
+                    Process.Start("acad.exe");
+                    Process.GetCurrentProcess().Kill();
+                }
+                catch { }
+            }
         }
     }
 

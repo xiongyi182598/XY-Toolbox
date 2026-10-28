@@ -59,6 +59,10 @@ white_list = [
     "README.txt"
 ]
 
+import glob
+for dll_f in glob.glob(os.path.join(base_dir, "XY_Toolbox*.dll")):
+    shutil.copy2(dll_f, os.path.join(stage_dir, os.path.basename(dll_f)))
+
 copied = 0
 for filename in white_list:
     src = os.path.join(base_dir, filename)

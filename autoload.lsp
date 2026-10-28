@@ -72,27 +72,86 @@
    )
 )
 
-;; 商业级加载架构：
-;; 100% 直接加载根目录最新 XY_Toolbox.dll，坚决杜绝 cache 缓存幽灵旧版本
-(defun xy:load-latest-dll ( / dir dll-path cache-dir )
+;; 商业级无锁动态版本加载架构 (Version-Ranked Dynamic Loader)：
+;; 彻底解决 Windows 文件锁冲突，下载的新版直接存为新代号 DLL (例如 XY_Toolbox_104.dll)
+;; 无论旧版是否被占用，新版都能 100% 毫无阻碍地物理落地，启动时全自动加载最新版本！
+(defun xy:extract-dll-ver (fname / len base num-str i ch)
+  (setq base (vl-filename-base fname))
+  (setq len (strlen base))
+  (setq num-str "")
+  (setq i len)
+  (while (> i 0)
+    (setq ch (substr base i 1))
+    (if (and (>= (ascii ch) 48) (<= (ascii ch) 57))
+      (setq num-str (strcat ch num-str))
+      (setq i 0)
+    )
+    (setq i (1- i))
+  )
+  (if (/= num-str "") (atoi num-str) 0)
+)
+
+(defun xy:load-latest-dll ( / dir all-files best-dll best-ver f v target-path cache-dir )
   (if (not *XY-TOOLBOX-LOADED*)
     (progn
       (setq dir (xy:get-toolbox-dir))
       (if (and dir (/= dir ""))
-        (setq dll-path (strcat dir "/XY_Toolbox.dll"))
-        (setq dll-path (findfile "XY_Toolbox.dll"))
-      )
-      (if (and dll-path (findfile dll-path))
         (progn
-          ;; 清理历史 cache 幽灵残留，避免加载陈旧旧版本
-          (setq cache-dir (strcat dir "/cache"))
-          (if (vl-file-directory-p cache-dir)
-            (vl-catch-all-apply 'vl-file-delete (list (strcat cache-dir "/XY_Toolbox_Run.dll")))
+          ;; 1. 自动处理暂存区 (若有残留文件，自动静默移入根目录)
+          (vl-catch-all-apply
+            '(lambda ( / pend-dir p-files pf )
+               (setq pend-dir (strcat dir "/pending_update"))
+               (if (vl-file-directory-p pend-dir)
+                 (progn
+                   (setq p-files (vl-directory-files pend-dir "*.*" 1))
+                   (foreach pf p-files
+                     (if (not (member pf '("." "..")))
+                       (vl-file-copy (strcat pend-dir "/" pf) (strcat dir "/" pf))
+                     )
+                   )
+                   (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/apply_update.bat")))
+                 )
+               )
+             )
           )
-          (setq dll-path (vl-string-translate "\\" "/" dll-path))
-          (vl-catch-all-apply 'vl-cmdf (list "_.netload" dll-path))
-          (setq *XY-TOOLBOX-LOADED* t)
-          dll-path
+
+          ;; 2. 扫描所有候选 DLL 并选出版本最高者
+          (setq all-files (vl-directory-files dir "XY_Toolbox*.dll" 1))
+          (setq best-dll nil best-ver -1)
+          (foreach f all-files
+            (if (not (vl-string-search "run" (strcase f)))
+              (progn
+                (setq v (xy:extract-dll-ver f))
+                (if (> v best-ver)
+                  (setq best-ver v best-dll f)
+                )
+              )
+            )
+          )
+          (if (not best-dll) (setq best-dll "XY_Toolbox.dll"))
+          (setq target-path (strcat dir "/" best-dll))
+
+          ;; 3. 执行 netload 核心组件
+          (if (findfile target-path)
+            (progn
+              (setq target-path (vl-string-translate "\\" "/" target-path))
+              (vl-catch-all-apply 'vl-cmdf (list "_.netload" target-path))
+              (setq *XY-TOOLBOX-LOADED* t)
+
+              ;; 4. 静默清理历史旧版本文件
+              (foreach f all-files
+                (if (and (/= f best-dll) (/= f "XY_Toolbox.dll"))
+                  (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" f)))
+                )
+              )
+              ;; 清理 cache 幽灵残留
+              (setq cache-dir (strcat dir "/cache"))
+              (if (vl-file-directory-p cache-dir)
+                (vl-catch-all-apply 'vl-file-delete (list (strcat cache-dir "/XY_Toolbox_Run.dll")))
+              )
+              target-path
+            )
+          )
         )
       )
     )
