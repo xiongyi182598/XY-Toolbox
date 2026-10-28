@@ -1,122 +1,21 @@
 @echo off
 chcp 936 >nul
-setlocal enabledelayedexpansion
-title XY¹¤¾ßÏä - ÉÌÒµ¼¶´¿¾»·¢²¼Óë¸üĞÂ°üÉú³ÉÆ÷
+title XYå·¥å…·ç®± - å•†ä¸šå‘å¸ƒåŒ…ä¸€é”®æ„å»ºå™¨
 
 pushd "%~dp0"
 
 echo ========================================================
-echo   XY¹¤¾ßÏä ¡¤ ÉÌÒµ¼¶´¿¾»·¢²¼Óë¸üĞÂ°ü×Ô¶¯»¯¹¹½¨Æ÷
-echo   ¹¦ÄÜ: ¹Ì»¯ÕıÊ½ÄÚºË + Ô´ÂëÑÏ¸ñÎïÀí¸ôÀë + ×Ô¶¯Éú³É·¢²¼ZIP
+echo   XYå·¥å…·ç®± Â· å•†ä¸šçº§çº¯å‡€å‘å¸ƒä¸æ›´æ–°åŒ…ä¸€é”®ç”Ÿæˆ
 echo ========================================================
 echo.
 
-:check_cad
-tasklist /fi "imagename eq acad.exe" | find /i "acad.exe" >nul
+where python >nul 2>nul
 if %errorlevel% equ 0 (
-    echo [!] ¼ì²âµ½ AutoCAD ÕıÔÚÔËĞĞÖĞ...
-    echo     ÎªÁËÈ·±£ºËĞÄ DLL ²»±»ÏµÍ³Ëø¶¨²¢ÄÜË³Àû¹Ì»¯Óë´ò°ü£¬
-    echo     Çë±£´æÍ¼Ö½ºóÍË³ö AutoCAD¡£
-    echo.
-    echo ÍË³ö CAD ºóÇë°´ÈÎÒâ¼ü¼ÌĞø...
-    pause >nul
-    goto check_cad
+    python make_release.py
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_release.ps1"
 )
 
-echo [*] AutoCAD ÒÑ¹Ø±Õ£¬ÕıÔÚÖ´ĞĞ·¢²¼¹¹½¨Á÷Ë®Ïß...
-echo.
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& {
-    $ToolboxDir = Get-Location
-    $stdDll = Join-Path $ToolboxDir 'XY_Toolbox.dll'
-    
-    # 1. ¹Ì»¯×îĞÂÄÚºË
-    $vDlls = Get-ChildItem -Path $ToolboxDir -Filter 'XY_Toolbox_v*.dll' | Sort-Object LastWriteTime -Descending
-    if ($vDlls -and $vDlls.Count -gt 0) {
-        $latest = $vDlls[0]
-        Write-Host ('  [+] ÌáÈ¡×îĞÂÄÚºË: ' + $latest.Name) -ForegroundColor Cyan
-        Copy-Item -Path $latest.FullName -Destination $stdDll -Force
-        Write-Host '  [OK] ÒÑ³É¹¦¹Ì»¯Îª¹Ù·½±ê×¼ XY_Toolbox.dll' -ForegroundColor Green
-        
-        # ÇåÀí¶àÓà°æ±¾
-        $delCount = 0
-        $vDlls | ForEach-Object {
-            Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue
-            $delCount++
-        }
-        Write-Host ('  [-] ÒÑÇåÀí ' + $delCount + ' ¸öµ÷ÊÔ°æ±¾ (XY_Toolbox_v*.dll)') -ForegroundColor Yellow
-    }
-    
-    # 2. ½â³ı Windows °²È«ÇøÓòËø¶¨
-    Get-ChildItem -Path $ToolboxDir -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
-    Write-Host '  [OK] ÒÑµİ¹é½â³ı Windows ¿ç»ú°²È«Ëø¶¨ (Zone.Identifier)' -ForegroundColor Green
-
-    # 3. ×¼±¸Êä³öÄ¿Â¼
-    $outDir = Join-Path $ToolboxDir '·¢²¼³É¹ûÎï'
-    if (Test-Path $outDir) { Remove-Item -Path $outDir -Recurse -Force }
-    New-Item -Path $outDir -ItemType Directory -Force | Out-Null
-    
-    $tempStage = Join-Path $outDir 'XY_Toolbox_Release'
-    New-Item -Path $tempStage -ItemType Directory -Force | Out-Null
-
-    # 4. °×Ãûµ¥Ê½¸´ÖÆÔËĞĞÊ±±ØĞèÎÄ¼ş (ÑÏÃÜ×è¾øËùÓĞ .cs Ô´ÂëÓëË½ÓĞÅäÖÃ)
-    $whiteListFiles = @(
-        'XY_Toolbox.dll',
-        'autoload.lsp',
-        'shortcuts.lsp',
-        'shortcuts.ini',
-        'xy_block_erase.lsp',
-        'cmd_config.ini',
-        'version.json',
-        'app_logo_white.png',
-        'app_pure_transparent.ico',
-        'install.ps1',
-        'uninstall.ps1',
-        '¡¾Ò»¼ü°²×°¡¿Ë«»÷¼´¿ÉÓÀ¾ÃÊ¹ÓÃ.bat',
-        '¡¾Ò»¼üĞ¶ÔØ¡¿³¹µ×ÇåÀí»¹Ô­.bat',
-        'Ê¹ÓÃËµÃ÷Óë¿ì½İ¼üËÙ²é.txt',
-        'README.txt'
-    )
-
-    $copiedCount = 0
-    foreach ($f in $whiteListFiles) {
-        $src = Join-Path $ToolboxDir $f
-        if (Test-Path $src) {
-            Copy-Item -Path $src -Destination (Join-Path $tempStage $f) -Force
-            $copiedCount++
-        }
-    }
-    Write-Host ('  [OK] ³É¹¦´ò°ü ' + $copiedCount + ' ¸öºËĞÄÔËĞĞÎÄ¼ş (100% ¸ôÀëÔ´Âë)') -ForegroundColor Green
-
-    # 5. Éú³É¹© GitHub Release ºÍ ÔÚÏß¸üĞÂÊ¹ÓÃµÄ´¿¾»²¹¶¡°ü
-    $updateZip = Join-Path $outDir 'XY_Toolbox_Update.zip'
-    if (Test-Path $updateZip) { Remove-Item $updateZip -Force }
-    Compress-Archive -Path (Join-Path $tempStage '*') -DestinationPath $updateZip -Force
-    Write-Host '  [¡ï] ³É¹¦Éú³ÉÔÚÏßÉı¼¶°ü: ·¢²¼³É¹ûÎï\XY_Toolbox_Update.zip' -ForegroundColor Green
-
-    # 6. Éú³É¹©³õ´Î·Ö·¢¸øĞÂÓÃ»§µÄÍêÕûÉÌÒµÂÌÉ«°æÑ¹Ëõ°ü
-    $fullZip = Join-Path $outDir 'XY_Toolbox_v1.0.1_ÍêÕûÉÌÒµ¶ÀÁ¢°æ.zip'
-    if (Test-Path $fullZip) { Remove-Item $fullZip -Force }
-    Compress-Archive -Path $tempStage -DestinationPath $fullZip -Force
-    Write-Host '  [¡ï] ³É¹¦Éú³ÉÕûÌ×·Ö·¢°ü: ·¢²¼³É¹ûÎï\XY_Toolbox_v1.0.1_ÍêÕûÉÌÒµ¶ÀÁ¢°æ.zip' -ForegroundColor Green
-
-    # 7. ÇåÀíÖĞ¼äÁÙÊ±Ôİ´æÄ¿Â¼
-    Remove-Item -Path $tempStage -Recurse -Force
-}"
-
-echo.
-echo ========================================================
-echo   ¡ï ¹§Ï²£¡ÉÌÒµ¼¶·¢²¼¹¹½¨ÒÑÈ«²¿Íê³É£¡¡ï
-echo ========================================================
-echo   Êä³öÄ¿Â¼Î»ÓÚ: ¡¾·¢²¼³É¹ûÎï¡¿ ÎÄ¼ş¼ĞÖĞ
-echo.
-echo   ¡¾GitHub ÔÚÏß·¢²¼Óë¸üĞÂ·Ö·¢Ö¸Òı¡¿:
-echo   1. ´ò¿ªÄúµÄ GitHub ²Ö¿â: https://github.com/xiongyi182598/XY-Toolbox
-echo   2. ½«¸ùÄ¿Â¼µÄ version.json ÍÆËÍ»ò¸üĞÂÖÁ main ·ÖÖ§
-echo   3. ÔÚ²Ö¿âÓÒ²àµã»÷ [Releases] -> [Create a new release]
-echo      ±êÇ©Ìî v1.0.1£¬½«¡¾XY_Toolbox_Update.zip¡¿×÷Îª¸½¼şÉÏ´«·¢²¼
-echo   4. È«¹úËùÓĞÓÃ»§Æô¶¯ CAD Ê±½«×Ô¶¯¼ì²âµ½¸üĞÂ²¢Ò»¼üÉúĞ§£¡
-echo ========================================================
 echo.
 popd
 pause
