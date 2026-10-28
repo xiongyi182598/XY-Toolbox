@@ -1,4 +1,4 @@
-﻿# ========================================================
+# ========================================================
 # XY工具箱 - 官方原生绿色一键安装器 (install.ps1)
 # 商业级官方标准架构 (MANAGED=1, LOADCTRLS=2)
 # 零冲突: 完美支持 AutoCAD (2020-2026) / 天正建筑 (T20/T30 全系列) / 海龙工具箱
@@ -67,18 +67,11 @@ foreach ($base in $AcadRegTargets) {
             Get-ChildItem -Path $_.PSPath -ErrorAction SilentlyContinue | ForEach-Object {
                 $prodPath = $_.PSPath
                 
-                # A. 写入 Applications\XY_Toolbox_Net (打开图纸时由 AutoCAD 原生 CLR 自动加载)
+                # A. 确保清理注册表 Applications 强占用项（避免 AutoCAD 底层抢跑死锁 DLL，全部交由 autoload.lsp 商业级影子架构加载）
                 $appKey = Join-Path $prodPath "Applications\XY_Toolbox_Net"
                 try {
-                    if (-not (Test-Path $appKey)) {
-                        New-Item -ItemType Directory -Path $appKey -Force -ErrorAction SilentlyContinue | Out-Null
-                    }
                     if (Test-Path $appKey) {
-                        Set-ItemProperty -Path $appKey -Name "DESCRIPTION" -Value "XY_Toolbox_Net" -Type String -Force
-                        Set-ItemProperty -Path $appKey -Name "LOADER" -Value $DllPath -Type String -Force
-                        Set-ItemProperty -Path $appKey -Name "LOADCTRLS" -Value 2 -Type DWord -Force
-                        Set-ItemProperty -Path $appKey -Name "MANAGED" -Value 1 -Type DWord -Force
-                        $netAppsInstalled++
+                        Remove-Item -Path $appKey -Recurse -Force -ErrorAction SilentlyContinue
                     }
                 } catch { }
 

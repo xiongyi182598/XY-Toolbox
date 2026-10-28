@@ -72,8 +72,10 @@
    )
 )
 
-;; 安全动态加载核心 DLL（防重机制：已加载则跳过，杜绝重复 NETLOAD 抛出异常）
-(defun xy:load-latest-dll ( / dir dll-path )
+;; 商业级影子加载架构 (Shadow Copy)：
+;; 永远只加载 cache 副本，母体 XY_Toolbox.dll 永远不被锁定！
+;; 彻底解决 Windows 文件锁冲突，在线更新可随时随地直接物理覆盖母体，零故障、零重启死锁！
+(defun xy:load-latest-dll ( / dir dll-path cache-dir run-dll )
   (if (not *XY-TOOLBOX-LOADED*)
     (progn
       (setq dir (xy:get-toolbox-dir))
@@ -83,10 +85,21 @@
       )
       (if (and dll-path (findfile dll-path))
         (progn
-          (setq dll-path (vl-string-translate "\\" "/" dll-path))
-          (vl-catch-all-apply 'vl-cmdf (list "_.netload" dll-path))
+          (setq cache-dir (strcat dir "/cache"))
+          (if (not (vl-file-directory-p cache-dir)) (vl-mkdir cache-dir))
+          (setq run-dll (strcat cache-dir "/XY_Toolbox_Run.dll"))
+          (if (findfile run-dll) (vl-file-delete run-dll))
+          (if (not (findfile run-dll))
+            (vl-file-copy dll-path run-dll)
+            (progn
+              (setq run-dll (strcat cache-dir "/XY_Toolbox_" (rtos (getvar "CDATE") 2 0) ".dll"))
+              (vl-file-copy dll-path run-dll)
+            )
+          )
+          (setq run-dll (vl-string-translate "\\" "/" run-dll))
+          (vl-catch-all-apply 'vl-cmdf (list "_.netload" run-dll))
           (setq *XY-TOOLBOX-LOADED* t)
-          dll-path
+          run-dll
         )
       )
     )
