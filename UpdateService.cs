@@ -715,12 +715,17 @@ namespace XY_Toolbox
 
                         if (dllLocked)
                         {
-                            MessageBox.Show(this, 
-                                "更新包已成功部署！\n\n" +
-                                "✓ LISP 脚本与界面资源已实时热更新生效；\n" +
-                                "✓ 核心 DLL 模块因当前 AutoCAD 正在使用受到保护，已排入暂存区。\n\n" +
-                                "下次启动 AutoCAD 时将自动完成升级生效，或重启一次 AutoCAD 即可！", 
-                                "更新完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            DialogResult dr = MessageBox.Show(this, 
+                                "更新包已成功下载并就绪！\n\n" +
+                                "是否立即自动重启 AutoCAD 完成全新升级？\n\n" +
+                                "【是 (推荐)】：全自动优雅重启 CAD，2秒内秒级生效最新版！\n" +
+                                "【否】：下次您手动启动 CAD 时自动升级生效。", 
+                                "更新就绪 - 推荐立即自动重启", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                            if (dr == DialogResult.Yes)
+                            {
+                                RestartAndApplyUpdate(rootDir);
+                            }
                         }
                         else
                         {
@@ -738,6 +743,35 @@ namespace XY_Toolbox
                     }));
                 }
             });
+        }
+
+        private static void RestartAndApplyUpdate(string rootDir)
+        {
+            try
+            {
+                string acadExe = Process.GetCurrentProcess().MainModule.FileName;
+                string restartBat = Path.Combine(rootDir, "restart_apply.bat");
+                string batCode = "@echo off\r\n" +
+                                 "timeout /t 1 /nobreak >nul\r\n" +
+                                 "taskkill /f /im acad.exe >nul 2>&1\r\n" +
+                                 "timeout /t 1 /nobreak >nul\r\n" +
+                                 "copy /y pending_update\\*.dll . >nul 2>&1\r\n" +
+                                 "rd /s /q pending_update >nul 2>&1\r\n" +
+                                 "if exist apply_update.bat del /f /q apply_update.bat >nul 2>&1\r\n" +
+                                 "if exist run_updater.bat del /f /q run_updater.bat >nul 2>&1\r\n" +
+                                 "start \"\" \"" + acadExe + "\"\r\n" +
+                                 "del \"%~f0\" >nul 2>&1\r\n";
+                File.WriteAllText(restartBat, batCode, Encoding.Default);
+
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "cmd.exe";
+                psi.Arguments = "/c \"" + restartBat + "\"";
+                psi.CreateNoWindow = true;
+                psi.UseShellExecute = false;
+                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                Process.Start(psi);
+            }
+            catch { }
         }
     }
 

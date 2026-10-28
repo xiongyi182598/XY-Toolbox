@@ -53,6 +53,7 @@ white_list = [
     "install.ps1",
     "uninstall.ps1",
     "【一键安装】双击即可永久使用.bat",
+    "【一键升级并重启CAD】.bat",
     "【一键卸载】彻底清理还原.bat",
     "使用说明与快捷键速查.txt",
     "README.txt"
