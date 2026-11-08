@@ -494,6 +494,63 @@ namespace XY_Toolbox
             this.Controls.Add(btnCancel);
         }
 
+        public static string GetToolboxRootDirectory()
+        {
+            try
+            {
+                string asmLoc = typeof(UpdateService).Assembly.Location;
+                if (!string.IsNullOrEmpty(asmLoc))
+                {
+                    string dir = Path.GetDirectoryName(asmLoc);
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        if (Path.GetFileName(dir).Equals("cache", StringComparison.OrdinalIgnoreCase))
+                        {
+                            DirectoryInfo p = Directory.GetParent(dir);
+                            if (p != null && p.Exists) return p.FullName;
+                        }
+                        if (File.Exists(Path.Combine(dir, "autoload.lsp")))
+                            return dir;
+                    }
+                }
+            }
+            catch { }
+            try
+            {
+                string lsp = XY_Deepening_Toolbox.Commands.FindToolboxFile("autoload.lsp");
+                if (!string.IsNullOrEmpty(lsp) && File.Exists(lsp))
+                {
+                    string dir = Path.GetDirectoryName(lsp);
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                        return dir;
+                }
+            }
+            catch { }
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                if (File.Exists(Path.Combine(baseDir, "autoload.lsp")))
+                    return baseDir;
+            }
+            catch { }
+            try
+            {
+                string asmLoc = typeof(UpdateService).Assembly.Location;
+                if (!string.IsNullOrEmpty(asmLoc))
+                {
+                    string dir = Path.GetDirectoryName(asmLoc);
+                    if (Path.GetFileName(dir).Equals("cache", StringComparison.OrdinalIgnoreCase))
+                    {
+                        DirectoryInfo p = Directory.GetParent(dir);
+                        if (p != null && p.Exists) return p.FullName;
+                    }
+                    return dir;
+                }
+            }
+            catch { }
+            return AppDomain.CurrentDomain.BaseDirectory;
+        }
+
         private void BtnUpdate_Click(object sender, EventArgs e)
         {
             if (_info == null || string.IsNullOrEmpty(_info.DownloadUrl))
@@ -508,7 +565,7 @@ namespace XY_Toolbox
             prgDownload.Value = 0;
             lblStatus.Text = "正在连接加速镜像节点获取更新包...";
 
-            string rootDir = Path.GetDirectoryName(typeof(UpdateService).Assembly.Location);
+            string rootDir = GetToolboxRootDirectory();
             string tempDir = Path.Combine(Path.GetTempPath(), "XY_Toolbox_Update_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
             string zipPath = Path.Combine(tempDir, "update.zip");
@@ -633,7 +690,6 @@ namespace XY_Toolbox
                     }
 
                     // 开始逐文件部署
-                    bool dllLocked = false;
                     string pendingDir = Path.Combine(rootDir, "pending_update");
                     if (!Directory.Exists(pendingDir)) Directory.CreateDirectory(pendingDir);
 
@@ -650,20 +706,19 @@ namespace XY_Toolbox
                         string ext = Path.GetExtension(destFile).ToLower();
                         if (ext == ".dll")
                         {
-                            // 核心创新：直接生成全新代号的 DLL (如 XY_Toolbox_104.dll)
-                            // 当前 CAD 占用的是旧文件，新版本 DLL 永远无锁，100% 物理落盘成功！
+                            // 1. 无锁最新版本代号 DLL (例如 XY_Toolbox_105.dll) 直接物理落盘
+                            try { File.Copy(srcFile, verDllPath, true); } catch { }
+
+                            // 2. 写入 pending_update 备用
                             try
                             {
-                                File.Copy(srcFile, verDllPath, true);
+                                string pFile = Path.Combine(pendingDir, Path.GetFileName(destFile));
+                                File.Copy(srcFile, pFile, true);
                             }
                             catch { }
 
-                            // 同时尝试覆盖通用母体 (锁住则忽略，autoload.lsp 会自动优先加载最新代号 DLL)
-                            try
-                            {
-                                File.Copy(srcFile, destFile, true);
-                            }
-                            catch { }
+                            // 3. 同时尝试直接覆盖主 DLL (若当前 CAD 锁住则在重启批处理中强制覆盖)
+                            try { File.Copy(srcFile, destFile, true); } catch { }
                         }
                         else
                         {
@@ -672,38 +727,42 @@ namespace XY_Toolbox
                         }
                     }
 
-                    // 清理遗留历史批处理
-                    try
-                    {
-                        string pDir = Path.Combine(rootDir, "pending_update");
-                        if (Directory.Exists(pDir)) Directory.Delete(pDir, true);
-                        string[] oldBats = new string[] { "apply_update.bat", "run_updater.bat", "restart_apply.bat" };
-                        foreach (string ob in oldBats)
-                        {
-                            string obp = Path.Combine(rootDir, ob);
-                            if (File.Exists(obp)) File.Delete(obp);
-                        }
-                    }
-                    catch { }
-
                     this.Invoke(new Action(() =>
                     {
                         prgDownload.Value = 100;
-                        lblStatus.Text = "★ 更新部署成功！";
-                        btnUpdate.Enabled = false;
-                        btnCancel.Text = "完成";
+                        lblStatus.Text = "★ 更新部署就绪！点击下方按钮立即重启生效。";
+
+                        btnUpdate.Text = "★ 立即重启 AutoCAD 生效 (推荐)";
+                        btnUpdate.Size = new Size(250, 34);
+                        btnUpdate.Location = new Point(18, 345);
+                        btnUpdate.BackColor = Color.FromArgb(0, 160, 80);
+                        btnUpdate.Visible = true;
+                        btnUpdate.Enabled = true;
+                        btnUpdate.Click -= BtnUpdate_Click;
+                        btnUpdate.Click += (s, ev) =>
+                        {
+                            this.Hide();
+                            RestartAndApplyUpdate(rootDir, targetContentDir);
+                        };
+
+                        btnGitHub.Visible = false;
+
+                        btnCancel.Text = "稍后手动重启";
+                        btnCancel.Location = new Point(280, 345);
+                        btnCancel.Size = new Size(110, 34);
                         btnCancel.Enabled = true;
 
                         DialogResult dr = MessageBox.Show(this, 
                             string.Format("★ 恭喜！XY工具箱全套组件已在线升级至最新正式版 (v{0})！\n\n" +
-                                          "是否立即自动重启 AutoCAD 完成生效？\n\n" +
-                                          "【是 (推荐)】：全自动优雅重启 CAD，立即体验新版！\n" +
-                                          "【否】：下次您启动 CAD 时全自动无感生效。", _info.Version), 
-                            "在线升级成功 - 推荐重启生效", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                                          "是否立即自动重启 AutoCAD 完成全新升级？\n\n" +
+                                          "【是 (推荐)】：全自动安全重启 CAD，2秒内秒级生效最新版！\n" +
+                                          "【否】：下次您手动启动 CAD 时自动生效。", _info.Version), 
+                            "在线升级成功 - 推荐立即重启生效", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
 
                         if (dr == DialogResult.Yes)
                         {
-                            RestartAutoCad();
+                            this.Hide();
+                            RestartAndApplyUpdate(rootDir, targetContentDir);
                         }
                         else
                         {
@@ -723,30 +782,99 @@ namespace XY_Toolbox
             });
         }
 
-        private static void RestartAutoCad()
+        public static void RestartAndApplyUpdate(string rootDir, string targetContentDir)
         {
             try
             {
-                string acadExe = Process.GetCurrentProcess().MainModule.FileName;
-                Process.Start(acadExe);
+                string acadExe = "";
+                try
+                {
+                    acadExe = Process.GetCurrentProcess().MainModule.FileName;
+                }
+                catch { }
+
+                string batPath = Path.Combine(rootDir, "_apply_restart.bat");
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine("@echo off");
+                sb.AppendLine("chcp 936 >nul 2>&1");
+                sb.AppendLine("setlocal enabledelayedexpansion");
+                sb.AppendLine("title XY工具箱 - 正在无感应用升级并重启CAD...");
+                sb.AppendLine("cd /d \"" + rootDir + "\"");
+                sb.AppendLine("");
+                sb.AppendLine(":: 1. 等待原 AutoCAD 进程完全退出释放文件锁");
+                sb.AppendLine("set /a wait_cnt=0");
+                sb.AppendLine(":wait_loop");
+                sb.AppendLine("timeout /t 1 /nobreak >nul");
+                sb.AppendLine("tasklist /fi \"imagename eq acad.exe\" 2>nul | findstr /i \"acad.exe\" >nul");
+                sb.AppendLine("if !errorlevel! equ 0 (");
+                sb.AppendLine("    set /a wait_cnt+=1");
+                sb.AppendLine("    if !wait_cnt! geq 3 (");
+                sb.AppendLine("        taskkill /f /im acad.exe >nul 2>&1");
+                sb.AppendLine("    )");
+                sb.AppendLine("    if !wait_cnt! leq 10 goto wait_loop");
+                sb.AppendLine(")");
+                sb.AppendLine("timeout /t 1 /nobreak >nul");
+                sb.AppendLine("");
+                sb.AppendLine(":: 2. 彻底清理旧 cache 幽灵目录");
+                sb.AppendLine("if exist \"cache\" rd /s /q \"cache\" >nul 2>&1");
+                sb.AppendLine("");
+                sb.AppendLine(":: 3. 从解压目录或 pending_update 将全套文件物理覆盖至工具箱主目录");
+                if (!string.IsNullOrEmpty(targetContentDir) && Directory.Exists(targetContentDir))
+                {
+                    sb.AppendLine("if exist \"" + targetContentDir + "\" (");
+                    sb.AppendLine("    xcopy /y /e /q \"" + targetContentDir + "\\*.*\" \".\" >nul 2>&1");
+                    sb.AppendLine(")");
+                }
+                sb.AppendLine("if exist \"pending_update\" (");
+                sb.AppendLine("    xcopy /y /e /q \"pending_update\\*.*\" \".\" >nul 2>&1");
+                sb.AppendLine("    rd /s /q \"pending_update\" >nul 2>&1");
+                sb.AppendLine(")");
+                sb.AppendLine("");
+                sb.AppendLine(":: 4. 确保母体 XY_Toolbox.dll 与最新代号 DLL 100% 同步覆盖");
+                sb.AppendLine("if exist \"XY_Toolbox_105.dll\" (");
+                sb.AppendLine("    copy /y \"XY_Toolbox_105.dll\" \"XY_Toolbox.dll\" >nul 2>&1");
+                sb.AppendLine(")");
+                sb.AppendLine("");
+                sb.AppendLine(":: 5. 清理历史辅助批处理");
+                sb.AppendLine("if exist \"apply_update.bat\" del /f /q \"apply_update.bat\" >nul 2>&1");
+                sb.AppendLine("if exist \"run_updater.bat\" del /f /q \"run_updater.bat\" >nul 2>&1");
+                sb.AppendLine("if exist \"restart_apply.bat\" del /f /q \"restart_apply.bat\" >nul 2>&1");
+                sb.AppendLine("");
+                sb.AppendLine(":: 6. 重新启动 AutoCAD");
+                if (!string.IsNullOrEmpty(acadExe))
+                {
+                    sb.AppendLine("if exist \"" + acadExe + "\" (");
+                    sb.AppendLine("    start \"\" \"" + acadExe + "\"");
+                    sb.AppendLine("    goto cleanup");
+                    sb.AppendLine(")");
+                }
+                sb.AppendLine("start \"\" acad.exe");
+                sb.AppendLine("");
+                sb.AppendLine(":cleanup");
+                sb.AppendLine("timeout /t 1 /nobreak >nul");
+                sb.AppendLine("(goto) 2>nul & del \"%~f0\"");
+
+                File.WriteAllText(batPath, sb.ToString(), Encoding.GetEncoding(936));
+
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "cmd.exe";
+                psi.Arguments = "/c \"" + batPath + "\"";
+                psi.WorkingDirectory = rootDir;
+                psi.UseShellExecute = true;
+                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                Process.Start(psi);
+
+                // 优雅退出当前 CAD
                 try
                 {
                     Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.SendStringToExecute("_.QUIT ", true, false, false);
                 }
                 catch
                 {
-                    Autodesk.AutoCAD.ApplicationServices.Application.Quit();
+                    try { Autodesk.AutoCAD.ApplicationServices.Application.Quit(); } catch { }
                 }
             }
-            catch
-            {
-                try
-                {
-                    Process.Start("acad.exe");
-                    Process.GetCurrentProcess().Kill();
-                }
-                catch { }
-            }
+            catch { }
         }
     }
 

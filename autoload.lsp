@@ -42,29 +42,54 @@
    )
 )
 
-;; 核心机制：在尚未加载任何 DLL 前，自动检测并无感应用在线更新暂存包 (双保险闭环)
+;; 核心机制 1：在尚未加载任何 DLL 前，自动检测并无感应用 cache 历史隔离区与在线更新暂存包 (全面自愈与容错闭环)
 (vl-catch-all-apply
-  '(lambda ( / dir pend-dll target-dll bat-f )
+  '(lambda ( / dir cache-dir c-files f src dst pend-dir p-files bat-f )
      (setq dir (xy:get-toolbox-dir))
      (if (and dir (/= dir ""))
        (progn
-         (setq pend-dll (strcat dir "/pending_update/XY_Toolbox.dll"))
-         (setq target-dll (strcat dir "/XY_Toolbox.dll"))
-         (if (findfile pend-dll)
+         ;; A. 自动吸收平移历史 cache 幽灵目录中因旧版解压残留的最新文件
+         (setq cache-dir (strcat dir "/cache"))
+         (if (vl-file-directory-p cache-dir)
            (progn
-             ;; AutoLISP 规则：vl-file-copy 遇到已存在的目标文件会直接返回 nil 拒绝覆盖
-             ;; 必须先安全删除目标文件，再复制，确保 100% 真正物理覆盖
-             (if (findfile target-dll)
-               (vl-file-delete target-dll)
-             )
-             (if (vl-file-copy pend-dll target-dll)
-               (progn
-                 (vl-file-delete pend-dll)
-                 (setq bat-f (strcat dir "/apply_update.bat"))
-                 (if (findfile bat-f) (vl-file-delete bat-f))
-                 (princ "\n★ [XY工具箱] 已成功无感完成核心组件最新版本物理升级！\n")
+             (setq c-files (vl-directory-files cache-dir "*.*" 1))
+             (foreach f c-files
+               (if (and (not (member f '("." ".."))) (not (vl-string-search "Run.dll" f)))
+                 (progn
+                   (setq src (strcat cache-dir "/" f))
+                   (setq dst (strcat dir "/" f))
+                   (if (findfile dst) (vl-file-delete dst))
+                   (vl-file-copy src dst)
+                 )
                )
              )
+             (vl-catch-all-apply 'vl-file-delete (list (strcat cache-dir "/XY_Toolbox_Run.dll")))
+           )
+         )
+
+         ;; B. 自动将 pending_update 中的待替换文件物理覆盖到主目录
+         (setq pend-dir (strcat dir "/pending_update"))
+         (if (vl-file-directory-p pend-dir)
+           (progn
+             (setq p-files (vl-directory-files pend-dir "*.*" 1))
+             (foreach f p-files
+               (if (not (member f '("." "..")))
+                 (progn
+                   (setq src (strcat pend-dir "/" f))
+                   (setq dst (strcat dir "/" f))
+                   (if (findfile dst) (vl-file-delete dst))
+                   (vl-file-copy src dst)
+                   (vl-file-delete src)
+                 )
+               )
+             )
+           )
+         )
+
+         ;; 清理旧辅助批处理
+         (foreach bat-f '("apply_update.bat" "run_updater.bat" "restart_apply.bat" "_apply_restart.bat")
+           (if (findfile (strcat dir "/" bat-f))
+             (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" bat-f)))
            )
          )
        )
@@ -73,18 +98,21 @@
 )
 
 ;; 商业级无锁动态版本加载架构 (Version-Ranked Dynamic Loader)：
-;; 彻底解决 Windows 文件锁冲突，下载的新版直接存为新代号 DLL (例如 XY_Toolbox_104.dll)
-;; 无论旧版是否被占用，新版都能 100% 毫无阻碍地物理落地，启动时全自动加载最新版本！
-(defun xy:extract-dll-ver (fname / len base num-str i ch)
+;; 扫描所有版本号后缀 DLL (如 XY_Toolbox_105.dll)，并准确提取全三位数版本代号 (如 105)
+(defun xy:extract-dll-ver (fname / len base num-str i ch in-num)
   (setq base (vl-filename-base fname))
   (setq len (strlen base))
   (setq num-str "")
+  (setq in-num nil)
   (setq i len)
   (while (> i 0)
     (setq ch (substr base i 1))
     (if (and (>= (ascii ch) 48) (<= (ascii ch) 57))
-      (setq num-str (strcat ch num-str))
-      (setq i 0)
+      (progn
+        (setq num-str (strcat ch num-str))
+        (setq in-num t)
+      )
+      (if in-num (setq i 0))
     )
     (setq i (1- i))
   )
@@ -97,25 +125,7 @@
       (setq dir (xy:get-toolbox-dir))
       (if (and dir (/= dir ""))
         (progn
-          ;; 1. 自动处理暂存区 (若有残留文件，自动静默移入根目录)
-          (vl-catch-all-apply
-            '(lambda ( / pend-dir p-files pf )
-               (setq pend-dir (strcat dir "/pending_update"))
-               (if (vl-file-directory-p pend-dir)
-                 (progn
-                   (setq p-files (vl-directory-files pend-dir "*.*" 1))
-                   (foreach pf p-files
-                     (if (not (member pf '("." "..")))
-                       (vl-file-copy (strcat pend-dir "/" pf) (strcat dir "/" pf))
-                     )
-                   )
-                   (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/apply_update.bat")))
-                 )
-               )
-             )
-          )
-
-          ;; 2. 扫描所有候选 DLL 并选出版本最高者
+          ;; 1. 扫描所有候选 DLL 并选出版本最高者
           (setq all-files (vl-directory-files dir "XY_Toolbox*.dll" 1))
           (setq best-dll nil best-ver -1)
           (foreach f all-files
@@ -131,11 +141,25 @@
           (if (not best-dll) (setq best-dll "XY_Toolbox.dll"))
           (setq target-path (strcat dir "/" best-dll))
 
+          ;; 2. 若最新代号 DLL 存在且主文件未锁，尝试同步母体文件
+          (if (and (/= best-dll "XY_Toolbox.dll") (findfile (strcat dir "/" best-dll)))
+            (vl-catch-all-apply
+              '(lambda ()
+                 (if (findfile (strcat dir "/XY_Toolbox.dll"))
+                   (vl-file-delete (strcat dir "/XY_Toolbox.dll"))
+                 )
+                 (vl-file-copy (strcat dir "/" best-dll) (strcat dir "/XY_Toolbox.dll"))
+               )
+            )
+          )
+
           ;; 3. 执行 netload 核心组件
           (if (findfile target-path)
             (progn
               (setq target-path (vl-string-translate "\\" "/" target-path))
-              (vl-catch-all-apply 'vl-cmdf (list "_.netload" target-path))
+              (if (not (vl-cmdf "_.netload" target-path))
+                (vl-catch-all-apply 'vl-cmdf (list "netload" target-path))
+              )
               (setq *XY-TOOLBOX-LOADED* t)
 
               ;; 4. 静默清理历史旧版本文件
@@ -143,11 +167,6 @@
                 (if (and (/= f best-dll) (/= f "XY_Toolbox.dll"))
                   (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" f)))
                 )
-              )
-              ;; 清理 cache 幽灵残留
-              (setq cache-dir (strcat dir "/cache"))
-              (if (vl-file-directory-p cache-dir)
-                (vl-catch-all-apply 'vl-file-delete (list (strcat cache-dir "/XY_Toolbox_Run.dll")))
               )
               target-path
             )

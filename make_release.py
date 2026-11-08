@@ -59,9 +59,19 @@ white_list = [
     "README.txt"
 ]
 
-import glob
-for dll_f in glob.glob(os.path.join(base_dir, "XY_Toolbox*.dll")):
-    shutil.copy2(dll_f, os.path.join(stage_dir, os.path.basename(dll_f)))
+# 4.1 提取核心 DLL (仅打包母体与当前最新代号 DLL，不打包陈旧版本)
+shutil.copy2(os.path.join(base_dir, "XY_Toolbox.dll"), os.path.join(stage_dir, "XY_Toolbox.dll"))
+ver_code = "105"
+if os.path.exists(ver_json):
+    try:
+        with open(ver_json, "r", encoding="utf-8") as f:
+            v_data = json.load(f)
+            ver_code = str(v_data.get("version_code", "105"))
+    except:
+        pass
+ver_dll_name = f"XY_Toolbox_{ver_code}.dll"
+if os.path.exists(os.path.join(base_dir, ver_dll_name)):
+    shutil.copy2(os.path.join(base_dir, ver_dll_name), os.path.join(stage_dir, ver_dll_name))
 
 copied = 0
 for filename in white_list:
