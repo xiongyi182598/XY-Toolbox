@@ -1,15 +1,15 @@
 ;; ========================================================
-;; XYå·¥å…·ç®±å…¨å¥—è‡ªåŠ¨åŒ–å·¥å…· (autoload.lsp)
-;; å®Œç¾å…¼: åŸç”Ÿ AutoCAD (2020-2026) / å¤©å»º (T20/T30 å…¨ç³») / æµ·é¾™å·¥å…·
+;; XY¹¤¾ßÏäÈ«Ì××Ô¶¯»¯¹¤¾ß (autoload.lsp)
+;; ÍêÃÀ¼æ: Ô­Éú AutoCAD (2020-2026) / Ìì½¨ (T20/T30 È«Ïµ) / º£Áú¹¤¾ß
 ;; ========================================================
 
 (vl-load-com)
 
-;; è§£é™¤é«˜ç‰ˆ AutoCAD å®‰å…¨æ‹¦æˆªæœºåˆ¶å¹¶å…è®¸å…¨æ–‡æ¡£åŠ è½½ (å€Ÿé‰´æµ·é¾™ä¸æºæ³‰)
+;; ½â³ı¸ß°æ AutoCAD °²È«À¹½Ø»úÖÆ²¢ÔÊĞíÈ«ÎÄµµ¼ÓÔØ (½è¼øº£ÁúÓëÔ´Èª)
 (if (getvar "SECURELOAD") (setvar "SECURELOAD" 0))
 (if (getvar "ACADLSPASDOC") (setvar "ACADLSPASDOC" 1))
 
-;; å…¨å±€åŠ¨å®šä½å·¥å…·çœŸå®ä¸» (å®‰å…¨è·¨ç›˜ç¬¦è·¨ç‰ˆæœ¬ã€æœç»ç¡¬ç¼–ç ä¹±ç )
+;; È«¾Ö¶¯¶¨Î»¹¤¾ßÕæÊµÖ÷ (°²È«¿çÅÌ·û¿ç°æ±¾¡¢¶Å¾øÓ²±àÂëÂÒÂë)
 (defun xy:get-toolbox-dir ( / p )
   (cond
     ((setq p (findfile "autoload.lsp"))
@@ -20,7 +20,7 @@
   )
 )
 
-;; åŠ¨æ³¨å†Œå½“å‰ç›®å½•åˆ°å½“å‰æ´»è·ƒ Profile çš„å—ä¿¡ä»»å¾„ä¸æŒæœç´¢è·¯å¾„æœ€å‰
+;; ¶¯×¢²áµ±Ç°Ä¿Â¼µ½µ±Ç°»îÔ¾ Profile µÄÊÜĞÅÈÎ¾¶Óë³ÖËÑË÷Â·¾¶×îÇ°
 (vl-catch-all-apply
   '(lambda ( / acad-obj prefs files cur-sup cur-tru my-dir)
      (setq my-dir (xy:get-toolbox-dir))
@@ -42,13 +42,13 @@
    )
 )
 
-;; æ ¸å¿ƒæœºåˆ¶ 1ï¼šåœ¨å°šæœªåŠ è½½ä»»ä½• DLL å‰ï¼Œè‡ªåŠ¨æ£€æµ‹å¹¶æ— æ„Ÿåº”ç”¨ cache å†å²éš”ç¦»åŒºä¸åœ¨çº¿æ›´æ–°æš‚å­˜åŒ… (å…¨é¢è‡ªæ„ˆä¸å®¹é”™é—­ç¯)
+;; ºËĞÄ»úÖÆ 1£ºÔÚÉĞÎ´¼ÓÔØÈÎºÎ DLL Ç°£¬×Ô¶¯¼ì²â²¢ÎŞ¸ĞÓ¦ÓÃ cache ÀúÊ·¸ôÀëÇøÓëÔÚÏß¸üĞÂÔİ´æ°ü (È«Ãæ×ÔÓúÓëÈİ´í±Õ»·)
 (vl-catch-all-apply
   '(lambda ( / dir cache-dir c-files f src dst pend-dir p-files bat-f )
      (setq dir (xy:get-toolbox-dir))
      (if (and dir (/= dir ""))
        (progn
-         ;; A. è‡ªåŠ¨å¸æ”¶å¹³ç§»å†å² cache å¹½çµç›®å½•ä¸­å› æ—§ç‰ˆè§£å‹æ®‹ç•™çš„æœ€æ–°æ–‡ä»¶
+         ;; A. ×Ô¶¯ÎüÊÕÆ½ÒÆÀúÊ· cache ÓÄÁéÄ¿Â¼ÖĞÒò¾É°æ½âÑ¹²ĞÁôµÄ×îĞÂÎÄ¼ş
          (setq cache-dir (strcat dir "/cache"))
          (if (vl-file-directory-p cache-dir)
            (progn
@@ -67,7 +67,7 @@
            )
          )
 
-         ;; B. è‡ªåŠ¨å°† pending_update ä¸­çš„å¾…æ›¿æ¢æ–‡ä»¶ç‰©ç†è¦†ç›–åˆ°ä¸»ç›®å½•
+         ;; B. ×Ô¶¯½« pending_update ÖĞµÄ´ıÌæ»»ÎÄ¼şÎïÀí¸²¸Çµ½Ö÷Ä¿Â¼
          (setq pend-dir (strcat dir "/pending_update"))
          (if (vl-file-directory-p pend-dir)
            (progn
@@ -86,7 +86,7 @@
            )
          )
 
-         ;; æ¸…ç†æ—§è¾…åŠ©æ‰¹å¤„ç†
+         ;; ÇåÀí¾É¸¨ÖúÅú´¦Àí
          (foreach bat-f '("apply_update.bat" "run_updater.bat" "restart_apply.bat" "_apply_restart.bat")
            (if (findfile (strcat dir "/" bat-f))
              (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" bat-f)))
@@ -97,8 +97,8 @@
    )
 )
 
-;; å•†ä¸šçº§æ— é”åŠ¨æ€ç‰ˆæœ¬åŠ è½½æ¶æ„ (Version-Ranked Dynamic Loader)ï¼š
-;; æ‰«ææ‰€æœ‰ç‰ˆæœ¬å·åç¼€ DLL (å¦‚ XY_Toolbox_105.dll)ï¼Œå¹¶å‡†ç¡®æå–å…¨ä¸‰ä½æ•°ç‰ˆæœ¬ä»£å· (å¦‚ 105)
+;; ÉÌÒµ¼¶ÎŞËø¶¯Ì¬°æ±¾¼ÓÔØ¼Ü¹¹ (Version-Ranked Dynamic Loader)£º
+;; É¨ÃèËùÓĞ°æ±¾ºÅºó×º DLL (Èç XY_Toolbox_105.dll)£¬²¢×¼È·ÌáÈ¡È«ÈıÎ»Êı°æ±¾´úºÅ (Èç 105)
 (defun xy:extract-dll-ver (fname / len base num-str i ch in-num)
   (setq base (vl-filename-base fname))
   (setq len (strlen base))
@@ -125,7 +125,7 @@
       (setq dir (xy:get-toolbox-dir))
       (if (and dir (/= dir ""))
         (progn
-          ;; 1. æ‰«ææ‰€æœ‰å€™é€‰ DLL å¹¶é€‰å‡ºç‰ˆæœ¬æœ€é«˜è€…
+          ;; 1. É¨ÃèËùÓĞºòÑ¡ DLL ²¢Ñ¡³ö°æ±¾×î¸ßÕß
           (setq all-files (vl-directory-files dir "XY_Toolbox*.dll" 1))
           (setq best-dll nil best-ver -1)
           (foreach f all-files
@@ -141,7 +141,7 @@
           (if (not best-dll) (setq best-dll "XY_Toolbox.dll"))
           (setq target-path (strcat dir "/" best-dll))
 
-          ;; 2. è‹¥æœ€æ–°ä»£å· DLL å­˜åœ¨ä¸”ä¸»æ–‡ä»¶æœªé”ï¼Œå°è¯•åŒæ­¥æ¯ä½“æ–‡ä»¶
+          ;; 2. Èô×îĞÂ´úºÅ DLL ´æÔÚÇÒÖ÷ÎÄ¼şÎ´Ëø£¬³¢ÊÔÍ¬²½Ä¸ÌåÎÄ¼ş
           (if (and (/= best-dll "XY_Toolbox.dll") (findfile (strcat dir "/" best-dll)))
             (vl-catch-all-apply
               '(lambda ()
@@ -153,7 +153,7 @@
             )
           )
 
-          ;; 3. æ‰§è¡Œ netload æ ¸å¿ƒç»„ä»¶
+          ;; 3. Ö´ĞĞ netload ºËĞÄ×é¼ş
           (if (findfile target-path)
             (progn
               (setq target-path (vl-string-translate "\\" "/" target-path))
@@ -162,7 +162,7 @@
               )
               (setq *XY-TOOLBOX-LOADED* t)
 
-              ;; 4. é™é»˜æ¸…ç†å†å²æ—§ç‰ˆæœ¬æ–‡ä»¶
+              ;; 4. ¾²Ä¬ÇåÀíÀúÊ·¾É°æ±¾ÎÄ¼ş
               (foreach f all-files
                 (if (and (/= f best-dll) (/= f "XY_Toolbox.dll"))
                   (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" f)))
@@ -178,7 +178,7 @@
 )
 (vl-catch-all-apply 'xy:load-latest-dll)
 
-;; åŠ¨åŠ è½½ç‹¬ç«‹çš„å…ç‚¸å—å†…ç©¿åˆ é™¤æ¨¡ (KSC/XSC)
+;; ¶¯¼ÓÔØ¶ÀÁ¢µÄÃâÕ¨¿éÄÚ´©É¾³ıÄ£ (KSC/XSC)
 (vl-catch-all-apply
   '(lambda ( / dir f )
      (setq dir (xy:get-toolbox-dir))
@@ -191,7 +191,7 @@
      (if (findfile "xy_block_erase.lsp") (load (findfile "xy_block_erase.lsp")))
    )
 )
-(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[é”™] è¯·å…ˆåŠ è½½ xy_block_erase.lsp")))
+(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[´í] ÇëÏÈ¼ÓÔØ xy_block_erase.lsp")))
 (defun c:XSC () (c:KSC))
 (defun c:BDE () (c:KSC))
 
@@ -540,7 +540,7 @@
 
     (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
 
-      (princ (strcat "\n[Ğ¶]: " msg))
+      (princ (strcat "\n[§Ø]: " msg))
 
     )
 
@@ -570,7 +570,7 @@
 
   (if doc (setq blks (vla-get-blocks doc)))
 
-  ;; ä¿ç›®æ ‡å›¾å±‚å­˜ï¼Œè‹¥ä¸å­˜åœ¨åˆ™åŠ¨åˆ›å»ºå¹¶ç»§æ‰¿æºå›¾å±‚å±
+  ;; ±£Ä¿±êÍ¼²ã´æ£¬Èô²»´æÔÚÔò¶¯´´½¨²¢¼Ì³ĞÔ´Í¼²ãÊô
   (if (null (tblsearch "LAYER" tar))
     (vl-catch-all-apply
       '(lambda ( / src-data src-ent)
@@ -597,7 +597,7 @@
 
 
 
-  ;; Ğ»
+  ;; §İ
 
   (if (= (strcase (getvar "CLAYER")) (strcase src))
 
@@ -754,7 +754,7 @@
 
   (vla-endundomark doc)
 
-  ;; (vla-regen doc acAllViewports) ç§»é™¤å…¨å£é‡ç”Ÿæˆï¼Œæœç»é»‘å±
+  ;; (vla-regen doc acAllViewports) ÒÆ³ıÈ«¿ÚÖØÉú³É£¬¶Å¾øºÚÆÁ
 
 
 
@@ -770,7 +770,7 @@
 
                  "\n=======================================================\n"))
 
-  (princ (strcat "\n [XYå·¥å…·ç®±] å›¾å±‚ [" src "] å·²æˆåŠŸåˆå¹¶è‡³ [" tar "]ï¼Œå…±å¤„ç† " (itoa count) " å›¾å…ƒã€‚\n"))
+  (princ (strcat "\n [XY¹¤¾ßÏä] Í¼²ã [" src "] ÒÑ³É¹¦ºÏ²¢ÖÁ [" tar "]£¬¹²´¦Àí " (itoa count) " Í¼Ôª¡£\n"))
 
   (princ)
 
@@ -787,24 +787,24 @@
 
 
 ;; ========================================================
-;; æ¨¡å— 3: å›¾å±‚åˆå¹¶è§†åŒ–é¢æ¿ä¸å†… DCL
+;; Ä£¿é 3: Í¼²ãºÏ²¢ÊÓ»¯Ãæ°åÓëÄÚ DCL
 ;; ========================================================
 
 (if (null *last_tar_layer*) (setq *last_tar_layer* nil))
 (if (null *last_src_layer*) (setq *last_src_layer* nil))
 
 ;; ========================================================
-;; Ä£: Ö´Í¼Ï² (HB2 / XHB / fast_merge)
-;; ×°Î³É° DCLĞ¿İ¼Ç²Í³Ò» C# Ö´
+;;  :     (HB2 / XHB / fast_merge)
+;;  ¦Ã  DCL§á     C#  
 ;; ========================================================
 (defun c:fast_merge ( / )
   (xy:load-latest-dll)
   (cond
-    ;; 1.  C# ×¢ LISP Ô­Ó¿Ú£Ö±Óµ
+    ;; 1.  C#   LISP      
     ((vl-position "XY_SHOW_LAYERMERGE" (atoms-family 1))
      (xy_show_layermerge)
     )
-    ;; 2. Í¨Ô­×² _.HBDLG  (Í¬ HB2 İ¹)
+    ;; 2.     _.HBDLG  (  HB2  )
     (t
      (if (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.HBDLG")))
        (if (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.XHB")))
@@ -822,35 +822,35 @@
 (defun c:xhb () (c:fast_merge))
 
 (defun c:fast_merge_quick ()
-  ;; ä¼˜å…ˆä½¿ç”¨ .NET åŸç”Ÿå†…å­˜çº§æé€Ÿåˆ (0.005ç§’ï¼Œé›¶ç©ºé—´åˆ‡ï¼Œé›¶é»‘å±)
+  ;; ÓÅÏÈÊ¹ÓÃ .NET Ô­ÉúÄÚ´æ¼¶¼«ËÙºÏ (0.005Ãë£¬Áã¿Õ¼äÇĞ£¬ÁãºÚÆÁ)
   (xy:load-latest-dll)
   (if (not (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.FASTMERGE"))))
     (princ)
     (progn
       (setvar "CMDECHO" 0)
       (princ "\n=======================================================")
-      (princ "\n>>> æå›¾å±‚åˆ (å…å¼¹çª—ç‚¹é€‰åˆ) <<<")
-      (setq src-lyr (pick_layer_from_entity "\n1. è¯·åœ¨å›¾é¢ä¸Šç‚¹é€‰æºå›¾å±‚ã€‘å›¾: "))
+      (princ "\n>>> ¼«Í¼²ãºÏ (Ãâµ¯´°µãÑ¡ºÏ) <<<")
+      (setq src-lyr (pick_layer_from_entity "\n1. ÇëÔÚÍ¼ÃæÉÏµãÑ¡Ô´Í¼²ã¡¿Í¼: "))
       (if src-lyr
         (progn
-          (princ (strcat " -> å·²æºå›¾å±‚: [" src-lyr "]"))
+          (princ (strcat " -> ÒÑÔ´Í¼²ã: [" src-lyr "]"))
           (setq *last_src_layer* src-lyr)
           (setq tar-lyr (pick_layer_from_entity 
                           (if *last_tar_layer*
-                            (strcat "\n2. è¯·ç‚¹é€‰ç›®æ ‡å›¾å±‚å›¾ (ç›´æ¥å›è½¦é»˜: [" *last_tar_layer* "]): ")
-                            "\n2. è¯·åœ¨å›¾é¢ä¸Šç‚¹é€‰ç›®æ ‡å›¾å±‚å›¾: ")))
+                            (strcat "\n2. ÇëµãÑ¡Ä¿±êÍ¼²ãÍ¼ (Ö±½Ó»Ø³µÄ¬: [" *last_tar_layer* "]): ")
+                            "\n2. ÇëÔÚÍ¼ÃæÉÏµãÑ¡Ä¿±êÍ¼²ãÍ¼: ")))
           (if (and (null tar-lyr) *last_tar_layer*)
             (setq tar-lyr *last_tar_layer*)
           )
           (if tar-lyr
             (if (= (strcase src-lyr) (strcase tar-lyr))
-              (princ "\n[æç¤º] æºå›¾å±‚ä¸æ ‡å›¾å±‚ç›¸åŒï¼Œæ— éœ€åˆå¹¶")
+              (princ "\n[ÌáÊ¾] Ô´Í¼²ãÓë±êÍ¼²ãÏàÍ¬£¬ÎŞĞèºÏ²¢")
               (progn
                 (setq *last_tar_layer* tar-lyr)
                 (execute_layer_merge src-lyr tar-lyr T T)
               )
             )
-            (princ "\n[æç¤º] æŒ‡å®šæ ‡å›¾å±‚ï¼Œæ“ä½œå·²å–æ¶ˆ")
+            (princ "\n[ÌáÊ¾] Ö¸¶¨±êÍ¼²ã£¬²Ù×÷ÒÑÈ¡Ïû")
           )
         )
       )
@@ -866,7 +866,7 @@
 
   (if doc (setq blks (vla-get-blocks doc)))
 
-  ;; ä¿ç›®æ ‡å›¾å±‚å­˜ï¼Œè‹¥ä¸å­˜åœ¨åˆ™åŠ¨åˆ›å»ºå¹¶ç»§æ‰¿æºå›¾å±‚å±
+  ;; ±£Ä¿±êÍ¼²ã´æ£¬Èô²»´æÔÚÔò¶¯´´½¨²¢¼Ì³ĞÔ´Í¼²ãÊô
   (if (null (tblsearch "LAYER" tar))
     (vl-catch-all-apply
       '(lambda ( / src-data src-ent)
@@ -957,7 +957,7 @@
 
       (vla-endundomark doc)
 
-      ;; (vla-regen doc acAllViewports) ç§»é™¤å…¨å£é‡ç”Ÿæˆï¼Œæœç»é»‘å±
+      ;; (vla-regen doc acAllViewports) ÒÆ³ıÈ«¿ÚÖØÉú³É£¬¶Å¾øºÚÆÁ
 
       (princ (strcat "\n======================================================="
 
@@ -973,7 +973,7 @@
 
     )
 
-    (princ "\n>>> Î´Îº\n")
+    (princ "\n>>> ¦Ä¦Ê\n")
 
   )
 
@@ -992,14 +992,14 @@
 
 
 ;; ========================================================
-;; æ¨¡å— 5: å±å—æ–‡å­—ç©¿å¹³ (MW / MY / UNIVERSAL_MOVE_TEXT)
-;; ä¼˜å…ˆè°ƒç”¨ .NET åŸç”Ÿ DrawJigï¼ˆæ”¯æŒä»»æ„å£æ¯”ä¾‹é€‚åº”ã€ç‹¬ç«‹æ–‡å­—å®æ—¶æ‹–æ‹½ç²¾è·è¾“å…¥ï¼‰
+;; Ä£¿é 5: Êô¿éÎÄ×Ö´©Æ½ (MW / MY / UNIVERSAL_MOVE_TEXT)
+;; ÓÅÏÈµ÷ÓÃ .NET Ô­Éú DrawJig£¨Ö§³ÖÈÎÒâ¿Ú±ÈÀıÊÊÓ¦¡¢¶ÀÁ¢ÎÄ×ÖÊµÊ±ÍÏ×§¾«¾àÊäÈë£©
 ;; ========================================================
 
 (defun c:UNIVERSAL_MOVE_TEXT ( / )
   (vl-catch-all-apply 'xy:load-latest-dll)
 
-;; åŠ¨åŠ è½½ç‹¬ç«‹çš„å…ç‚¸å—å†…ç©¿åˆ é™¤æ¨¡ (KSC/XSC)
+;; ¶¯¼ÓÔØ¶ÀÁ¢µÄÃâÕ¨¿éÄÚ´©É¾³ıÄ£ (KSC/XSC)
 (vl-catch-all-apply
   '(lambda ( / dir f )
      (setq dir (xy:get-toolbox-dir))
@@ -1012,7 +1012,7 @@
      (if (findfile "xy_block_erase.lsp") (load (findfile "xy_block_erase.lsp")))
    )
 )
-(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[é”™] è¯·å…ˆåŠ è½½ xy_block_erase.lsp")))
+(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[´í] ÇëÏÈ¼ÓÔØ xy_block_erase.lsp")))
 (defun c:XSC () (c:KSC))
 (defun c:BDE () (c:KSC))
 
@@ -1150,7 +1150,7 @@
 
             (setq line (vl-string-trim " \t\r\n" line))
 
-            ;; è¿‡æ»¤ UTF-8 BOM æˆ–ç‰¹æ®Šéšè—å­—
+            ;; ¹ıÂË UTF-8 BOM »òÌØÊâÒş²Ø×Ö
 
             (while (and (> (strlen line) 0) 
 
@@ -1170,7 +1170,7 @@
 
                   (setq val (substr line (+ (vl-string-search "=" line) 2)))
 
-                  ;; å»é™¤åä¸­ BOM æˆ–ä¸è§å­—
+                  ;; È¥³ıÃûÖĞ BOM »ò²»¼û×Ö
 
                   (setq k (vl-string-trim " \t\r\n" k))
 
@@ -1225,9 +1225,9 @@
 
       (write-line "; ========================================================" f)
 
-      (write-line "; XYå·¥å…· - æ·é”®é…ç½®æ–‡ä»¶ (shortcuts.ini)" f)
+      (write-line "; XY¹¤¾ß - ½İ¼üÅäÖÃÎÄ¼ş (shortcuts.ini)" f)
 
-      (write-line "; æŒå·éš”å¼€å¤šä¸ªåï¼Œæ”¹åè¾“å…¥ REKEY å³å¯ç«‹å³åˆ·æ–°ç”Ÿæ•ˆ" f)
+      (write-line "; ³ÖºÅ¸ô¿ª¶à¸öÃû£¬¸ÄºóÊäÈë REKEY ¼´¿ÉÁ¢¼´Ë¢ĞÂÉúĞ§" f)
 
       (write-line "; ========================================================" f)
 
@@ -1338,7 +1338,7 @@
 
 
 
-  ;; åŠ¨ç»‘å®šæ‰€æœ‰å¿«æ·é”® (æŒåˆ«åä¸å¤§å°å†™ä¸æ•æ„Ÿ)
+  ;; ¶¯°ó¶¨ËùÓĞ¿ì½İ¼ü (³Ö±ğÃûÓë´óĞ¡Ğ´²»Ãô¸Ğ)
 
   (bind_alias_to_command cmd_quick 'c:fast_merge_quick)
 
@@ -1356,7 +1356,7 @@
 
 
 
-  ;; ä¿ç”¨æˆ·è‡ªå®šä¹‰æ·é”®ä¸å¸¸ç”¨å¿«æ·é”®å‡å¯ä½¿ç”¨
+  ;; ±£ÓÃ»§×Ô¶¨Òå½İ¼üÓë³£ÓÃ¿ì½İ¼ü¾ù¿ÉÊ¹ÓÃ
 
   (if (null (read "c:HB1")) (defun c:HB1 () (c:fast_merge_quick)))
 
@@ -1385,7 +1385,7 @@
 
 ;; ========================================================
 
-;; æèµ„ä¾§è¾¹æ é¢æ¿å‘¼å‡ºå‘½ (XYSZ / ZYSZ)
+;; Ìá×Ê²à±ßÀ¸Ãæ°åºô³öÃü (XYSZ / ZYSZ)
 
 ;; ========================================================
 
@@ -1407,7 +1407,7 @@
 
 ;; ========================================================
 
-;; æ·é”®å®šä¹‰è®¾ç½®å‘½ä»¤ (SETKEY / KJSZ / CFG)
+;; ½İ¼ü¶¨ÒåÉèÖÃÃüÁî (SETKEY / KJSZ / CFG)
 
 ;; ========================================================
 
@@ -1430,13 +1430,13 @@
 
           (startapp "notepad.exe" ini_path)
 
-          (princ "\n [XYå·¥å…·ç®±] å·²åœ¨è®°äº‹æ‰“å¼€æ·é”®æ–‡ä»¶ shortcuts.ini")
+          (princ "\n [XY¹¤¾ßÏä] ÒÑÔÚ¼ÇÊÂ´ò¿ª½İ¼üÎÄ¼ş shortcuts.ini")
 
-          (princ "\n æ”¹å¹¶ä¿å­˜åï¼Œåœ¨å‘½ä»¤è¾“ REKEY å³å¯ç«‹å³åˆ·æ–°ç”Ÿæ•ˆï¼\n")
+          (princ "\n ¸Ä²¢±£´æºó£¬ÔÚÃüÁîÊä REKEY ¼´¿ÉÁ¢¼´Ë¢ĞÂÉúĞ§£¡\n")
 
         )
 
-        (alert "æ‰¾åˆ°æ·é”®é…ç½®æ–‡ä»¶ shortcuts.ini")
+        (alert "ÕÒµ½½İ¼üÅäÖÃÎÄ¼ş shortcuts.ini")
 
       )
 
@@ -1462,7 +1462,7 @@
 
 ;; ========================================================
 
-;; æ·é”®é‡è½½å‘½ä»¤ (REKEY / RELOADKEY)
+;; ½İ¼üÖØÔØÃüÁî (REKEY / RELOADKEY)
 
 ;; ========================================================
 
@@ -1492,19 +1492,19 @@
 
   (princ "\n========================================================")
 
-  (princ "\n   [XYå·¥å…·ç®±] æ·é”®å·²æˆåŠŸé‡æ–°åŠ è½½ç”Ÿæ•ˆï¼")
+  (princ "\n   [XY¹¤¾ßÏä] ½İ¼üÒÑ³É¹¦ÖØĞÂ¼ÓÔØÉúĞ§£¡")
 
-  (princ (strcat "\n  1. å›¾å±‚æåˆ (å…å¼¹)   :  " _mq " "))
+  (princ (strcat "\n  1. Í¼²ã¼«ºÏ (Ãâµ¯)   :  " _mq " "))
 
-  (princ (strcat "\n  2. å›¾å±‚åˆå¹¶é¢æ¿ (é€‰æ‹©)   :  " _m  " "))
+  (princ (strcat "\n  2. Í¼²ãºÏ²¢Ãæ°å (Ñ¡Ôñ)   :  " _m  " "))
 
-  (princ (strcat "\n  3. å›¾å—æ·±åº¦0       :  " _b0 " "))
+  (princ (strcat "\n  3. Í¼¿éÉî¶È0       :  " _b0 " "))
 
-  (princ (strcat "\n  4. å±å—æ–‡å­—åŒå¹³      :  " _my " "))
+  (princ (strcat "\n  4. Êô¿éÎÄ×ÖÍ¬Æ½      :  " _my " "))
 
-  (princ (strcat "\n  5. åº•å±‚å›¾å…ƒç©¿æ¢        :  " _tc " "))
+  (princ (strcat "\n  5. µ×²ãÍ¼Ôª´©Ì½        :  " _tc " "))
 
-  (princ (strcat "\n  6. æèµ„é¢æ¿å‘¼å‡ºæ·é”®      :  " _p  " "))
+  (princ (strcat "\n  6. Ìá×ÊÃæ°åºô³ö½İ¼ü      :  " _p  " "))
 
   (princ "\n========================================================\n")
 
@@ -1518,7 +1518,7 @@
 
 ;; ========================================================
 
-;; åŠ¨æ—¶åº”ç”¨æ·é”®å¹¶æ‰“å°å°±æç¤º
+;; ¶¯Ê±Ó¦ÓÃ½İ¼ü²¢´òÓ¡¾ÍÌáÊ¾
 
 ;; ========================================================
 
@@ -1550,25 +1550,25 @@
 
 (princ "\n========================================================")
 
-(princ "\n   XYå·¥å…·ç®±å…¨å¥—å·¥å…·é›† - åŠ è½½æˆåŠŸ")
+(princ "\n   XY¹¤¾ßÏäÈ«Ì×¹¤¾ß¼¯ - ¼ÓÔØ³É¹¦")
 
-(princ (strcat "\n  1. å›¾å±‚æåˆ (å…å¼¹)   :  " _mq " "))
+(princ (strcat "\n  1. Í¼²ã¼«ºÏ (Ãâµ¯)   :  " _mq " "))
 
-(princ (strcat "\n  2. å›¾å±‚åˆå¹¶é¢æ¿ (é€‰æ‹©)   :  " _m  " "))
+(princ (strcat "\n  2. Í¼²ãºÏ²¢Ãæ°å (Ñ¡Ôñ)   :  " _m  " "))
 
-(princ (strcat "\n  3. å›¾å—æ·±åº¦0       :  " _b0 " "))
+(princ (strcat "\n  3. Í¼¿éÉî¶È0       :  " _b0 " "))
 
-(princ (strcat "\n  4. å±å—æ–‡å­—åŒå¹³      :  " _my " "))
+(princ (strcat "\n  4. Êô¿éÎÄ×ÖÍ¬Æ½      :  " _my " "))
 
-(princ (strcat "\n  5. åº•å±‚å›¾å…ƒç©¿æ¢        :  " _tc " "))
+(princ (strcat "\n  5. µ×²ãÍ¼Ôª´©Ì½        :  " _tc " "))
 
 (princ "\n  --------------------------------------------------------")
 
-(princ (strcat "\n   æ·±åŒ–æèµ„ä¾§è¾¹æ é¢æ¿å‘¼  :  " _p " "))
+(princ (strcat "\n   Éî»¯Ìá×Ê²à±ßÀ¸Ãæ°åºô  :  " _p " "))
 
-(princ "\n   å®šä¹‰æ·é”®è®¾ç½®        :  SETKEY / KJSZ ")
+(princ "\n   ¶¨Òå½İ¼üÉèÖÃ        :  SETKEY / KJSZ ")
 
-(princ "\n   æ·é”®é‡æ–°åŠ è½½ç”Ÿæ•ˆ      :  REKEY ")
+(princ "\n   ½İ¼üÖØĞÂ¼ÓÔØÉúĞ§      :  REKEY ")
 
 (princ "\n========================================================\n")
 
@@ -1578,7 +1578,7 @@
 
 
 ;; ========================================================
-;; åŠ è½½ç”¨æˆ·å®šä¹‰æ·é”® (shortcuts.lsp)
+;; ¼ÓÔØÓÃ»§¶¨Òå½İ¼ü (shortcuts.lsp)
 ;; ========================================================
 (if (findfile "shortcuts.lsp")
   (load (findfile "shortcuts.lsp"))
@@ -1594,9 +1594,9 @@
 (princ)
 
 ;; ========================================================
-;; æ›´æ–°å‘½ä»¤ (æ— éœ€è®°å¿†å¤æ‚å¾„ï¼Œå‘½ä»¤è¡Œè¾“ RELOAD å³å¯ç§’çº§åˆ·æ–°)
+;; ¸üĞÂÃüÁî (ÎŞĞè¼ÇÒä¸´ÔÓ¾¶£¬ÃüÁîĞĞÊä RELOAD ¼´¿ÉÃë¼¶Ë¢ĞÂ)
 ;; ========================================================
-;; é‡ç½®è§†å£å›¾å±‚è¦†ç›– (VPR)
+;; ÖØÖÃÊÓ¿ÚÍ¼²ã¸²¸Ç (VPR)
 (defun c:VPR ( / doc lt ltr )
   (vl-load-com)
   (setq doc (if (vlax-get-acad-object) (vla-get-activedocument (vlax-get-acad-object))))
@@ -1612,34 +1612,34 @@
            )
          )
          (vla-endundomark doc)
-         ;; (vla-regen doc acAllViewports) ç§»é™¤å…¨å£é‡ç”Ÿæˆï¼Œæœç»é»‘å±
+         ;; (vla-regen doc acAllViewports) ÒÆ³ıÈ«¿ÚÖØÉú³É£¬¶Å¾øºÚÆÁ
        )
     )
   )
-  (princ "\n [XYå·¥å…·ç®±] è§†å£å›¾å±‚è¦†ç›–å·²æˆåŠŸé‡ï¼\n")
+  (princ "\n [XY¹¤¾ßÏä] ÊÓ¿ÚÍ¼²ã¸²¸ÇÒÑ³É¹¦ÖØ£¡\n")
   (princ)
 )
 (defun c:reset_vp_overrides () (c:VPR))
 
-;; æ·±åº¦æ¸…ç†å†—ä½™æ•°æ® (PU)
+;; Éî¶ÈÇåÀíÈßÓàÊı¾İ (PU)
 (defun c:PU ( / )
   (setvar "CMDECHO" 0)
   (command "_.purge" "_all" "*" "_no")
   (command "_.audit" "_y")
   (setvar "CMDECHO" 1)
-  (princ "\n [XYå·¥å…·ç®±] å›¾çº¸æ·±åº¦æ¸…ç†ä¸ä¿®å¤å®Œæˆï¼\n")
+  (princ "\n [XY¹¤¾ßÏä] Í¼Ö½Éî¶ÈÇåÀíÓëĞŞ¸´Íê³É£¡\n")
   (princ)
 )
 
 
 ;; ========================================================
-;; XYå·¥å…· - Xå‰ç¼€æ‹¼éŸ³é¦–å­—æ¯æ ‡å‡†å¿«æ·æŒ‡ä»¤é›† (å…¼æµ·/å¤©)
+;; XY¹¤¾ß - XÇ°×ºÆ´ÒôÊ××ÖÄ¸±ê×¼¿ì½İÖ¸Áî¼¯ (¼æº£/Ìì)
 ;; ========================================================
 (defun c:XGJ ()
   (if (not *XY-TOOLBOX-LOADED*) (xy:load-latest-dll))
   (if (not (vl-cmdf "XGJ"))
     (if (not (vl-cmdf "XYPANEL"))
-      (if c:XYSZ (c:XYSZ) (princ "\n[XYå·¥å…·ç®±] å‘¼å‡ºå·¥ä½œå°å¤±è´¥ï¼Œè¯·å…ˆåŠ è½½ XYå·¥å…·ç®±ï¼"))
+      (if c:XYSZ (c:XYSZ) (princ "\n[XY¹¤¾ßÏä] ºô³ö¹¤×÷Ì¨Ê§°Ü£¬ÇëÏÈ¼ÓÔØ XY¹¤¾ßÏä£¡"))
     )
   )
   (princ)
@@ -1651,14 +1651,14 @@
 (defun c:xhb () (c:fast_merge))
 (defun c:HB2 () (c:fast_merge))
 (defun c:hb2 () (c:fast_merge))
-(defun c:XJH () (if c:fast_merge_quick (c:fast_merge_quick) (princ "\nè¯·å…ˆåŠ è½½ XYå·¥å…·ç®±ï¼")))
+(defun c:XJH () (if c:fast_merge_quick (c:fast_merge_quick) (princ "\nÇëÏÈ¼ÓÔØ XY¹¤¾ßÏä£¡")))
 (defun c:XDJ () (command "XDJ") (princ))
 (defun c:XJD () (command "XJD") (princ))
 (defun c:XHF () (command "XHF") (princ))
 (defun c:XDK () (command "XDJ") (princ))
-(defun c:XTC () (if c:detect_sub_entity (c:detect_sub_entity) (princ "\nè¯·å…ˆåŠ è½½ XYå·¥å…·ç®±ï¼")))
-(defun c:XSY () (if c:MW (c:MW) (princ "\nè¯·å…ˆåŠ è½½ XYå·¥å…·ç®±ï¼")))
-(defun c:XGL () (if c:B0 (c:B0) (princ "\nè¯·å…ˆåŠ è½½ XYå·¥å…·ç®±ï¼")))
+(defun c:XTC () (if c:detect_sub_entity (c:detect_sub_entity) (princ "\nÇëÏÈ¼ÓÔØ XY¹¤¾ßÏä£¡")))
+(defun c:XSY () (if c:MW (c:MW) (princ "\nÇëÏÈ¼ÓÔØ XY¹¤¾ßÏä£¡")))
+(defun c:XGL () (if c:B0 (c:B0) (princ "\nÇëÏÈ¼ÓÔØ XY¹¤¾ßÏä£¡")))
 (defun c:XKL () (c:XGL))
 (defun c:FZW () (vl-cmdf "FZW"))
 (defun c:fzw () (vl-cmdf "FZW"))
@@ -1669,7 +1669,7 @@
 (defun c:XSK () (c:SK))
 (defun c:xsk () (c:SK))
 (defun c:XQL () (c:PU))
-(defun c:XKJ () (if c:SETKEY (c:SETKEY) (princ "\nè¯·å…ˆåŠ è½½ XYå·¥å…·ç®±ï¼")))
+(defun c:XKJ () (if c:SETKEY (c:SETKEY) (princ "\nÇëÏÈ¼ÓÔØ XY¹¤¾ßÏä£¡")))
 
 (defun c:RELOAD ( / path dir erase_f )
   (setq dir (xy:get-toolbox-dir))
@@ -1686,27 +1686,27 @@
           (if (findfile erase_f) (load erase_f))
         )
       )
-      (defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[æç¤º] æ­£åœ¨å¯åŠ¨ç©¿é€åˆ é™¤æ¨¡å—...")))
+      (defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[ÌáÊ¾] ÕıÔÚÆô¶¯´©Í¸É¾³ıÄ£¿é...")))
       (defun c:XSC () (c:KSC))
       (defun c:BDE () (c:KSC))
       (if apply_all_toolbox_shortcuts
         (apply_all_toolbox_shortcuts)
       )
-      ;; å®‰å…¨è§¦å‘ C# å·¥ä½œå°é¢æ¿åˆ·æ–°ï¼ˆè‹¥é¢æ¿å·²åˆ›å»ºï¼‰
+      ;; °²È«´¥·¢ C# ¹¤×÷Ì¨Ãæ°åË¢ĞÂ£¨ÈôÃæ°åÒÑ´´½¨£©
       (vl-catch-all-apply 'vl-cmdf (list "XY_UPDATE_PANEL"))
       (princ "\n========================================================\n")
-      (princ "â˜… [XYå·¥å…·ç®±] ç¨‹åºé…ç½®ä¸å…¨å¥—å¿«æ·é”®çƒ­é‡è½½æˆåŠŸ (XCZ)ï¼\n")
-      (princ "â˜… æ ¸å¿ƒç»„ä»¶ä¸å…¨å¥—åŠŸèƒ½å·²åˆ·æ–°ï¼š\n")
-      (princ "  - SK  / SKYS : è§†å£å›¾å±‚æ ·å¼æ‚¬æµ®è¦†ç›– (ç©¿é€æ‹¾å–/æ”¹è‰²/æ”¹çº¿å‹)\n")
-      (princ "  - FZW / XFZ  : å›¾å—é•œåƒæ–‡å­—åŸä½ç©¿é€ç¿»æ­£ (å‡ ä½•ä¸­å¿ƒä¸¥æ ¼é”æ­»)\n")
-      (princ "  - XKB / XLS  : åŸä½å…åœ¨ä½ç¼–è¾‘ç©¿é€å›¾å—æ‹‰ä¼¸ä¸å¹³ç§»\n")
-      (princ "  - XHB / XJH  : è§„èŒƒåŒ–å›¾å±‚åˆå¹¶å™¨ä¸æé€Ÿç‚¹é€‰åˆå±‚\n")
-      (princ "  - KSC / XSC  : å…ç‚¸å¼€ç©¿é€åˆ é™¤å—å†…å›¾å…ƒ (æ”¯æŒMé”®è”åŠ¨/ç‹¬å )\n")
-      (princ "  - XGX / UPDATE: å•†ä¸šçº§åœ¨çº¿æ£€æµ‹æ›´æ–°ç³»ç»Ÿ\n")
-      (princ "  - XGJ / XYGJ : ä¾§è¾¹å·¥ä½œå°é¢æ¿\n")
+      (princ "¡ï [XY¹¤¾ßÏä] ³ÌĞòÅäÖÃÓëÈ«Ì×¿ì½İ¼üÈÈÖØÔØ³É¹¦ (XCZ)£¡\n")
+      (princ "¡ï ºËĞÄ×é¼şÓëÈ«Ì×¹¦ÄÜÒÑË¢ĞÂ£º\n")
+      (princ "  - SK  / SKYS : ÊÓ¿ÚÍ¼²ãÑùÊ½Ğü¸¡¸²¸Ç (´©Í¸Ê°È¡/¸ÄÉ«/¸ÄÏßĞÍ)\n")
+      (princ "  - FZW / XFZ  : Í¼¿é¾µÏñÎÄ×ÖÔ­Î»´©Í¸·­Õı (¼¸ºÎÖĞĞÄÑÏ¸ñËøËÀ)\n")
+      (princ "  - XKB / XLS  : Ô­Î»ÃâÔÚÎ»±à¼­´©Í¸Í¼¿éÀ­ÉìÓëÆ½ÒÆ\n")
+      (princ "  - XHB / XJH  : ¹æ·¶»¯Í¼²ãºÏ²¢Æ÷Óë¼«ËÙµãÑ¡ºÏ²ã\n")
+      (princ "  - KSC / XSC  : ÃâÕ¨¿ª´©Í¸É¾³ı¿éÄÚÍ¼Ôª (Ö§³ÖM¼üÁª¶¯/¶ÀÕ¼)\n")
+      (princ "  - XGX / UPDATE: ÉÌÒµ¼¶ÔÚÏß¼ì²â¸üĞÂÏµÍ³\n")
+      (princ "  - XGJ / XYGJ : ²à±ß¹¤×÷Ì¨Ãæ°å\n")
       (princ "========================================================\n")
     )
-    (princ "\n[é”™è¯¯] æœªæ‰¾åˆ° autoload.lsp æ–‡ä»¶\n")
+    (princ "\n[´íÎó] Î´ÕÒµ½ autoload.lsp ÎÄ¼ş\n")
   )
   (princ)
 )
@@ -1714,11 +1714,11 @@
 (defun c:XYLOAD () (c:RELOAD))
 ;; (c:XY removed to avoid conflict with Hailong)
 
-;; é»˜å°±åŠ è½½ï¼šç¡® CAD åŠ¨æˆ–é‡è½½æ—¶å·¥ä½œå°å¤„äºåŠ¨æ˜¾ç¤ºçŠ¶ (ä¸æµ·/å¤©ä¸€)
+;; Ä¬¾Í¼ÓÔØ£ºÈ· CAD ¶¯»òÖØÔØÊ±¹¤×÷Ì¨´¦ÓÚ¶¯ÏÔÊ¾×´ (Óëº£/ÌìÒ»)
 (vl-catch-all-apply
   '(lambda ()
        (princ "
-[XYå·¥å…·ç®±] æ ¸å¿ƒç¨‹åºå·²é™é»˜å°±ï¼é”® XGJ æ‰“å¼€å·¥ä½œå°ï¼Œ XKJ è®¾ç½®æ·é”®
+[XY¹¤¾ßÏä] ºËĞÄ³ÌĞòÒÑ¾²Ä¬¾Í£¡¼ü XGJ ´ò¿ª¹¤×÷Ì¨£¬ XKJ ÉèÖÃ½İ¼ü
 ")
    )
 )

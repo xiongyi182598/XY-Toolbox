@@ -42,8 +42,8 @@ namespace XY_Toolbox
     public static class UpdateService
     {
         // 本地当前版本常量
-        public const string CURRENT_VERSION = "1.0.5";
-        public const int CURRENT_VERSION_CODE = 105;
+        public const string CURRENT_VERSION = "1.0.6";
+        public const int CURRENT_VERSION_CODE = 106;
         public const string GITHUB_REPO_URL = "https://github.com/xiongyi182598/XY-Toolbox";
 
         // 多镜像版本信息地址源（优先国内加速通道）
@@ -831,8 +831,8 @@ namespace XY_Toolbox
                 sb.AppendLine(")");
                 sb.AppendLine("");
                 sb.AppendLine(":: 4. 确保母体 XY_Toolbox.dll 与最新代号 DLL 100% 同步覆盖");
-                sb.AppendLine("if exist \"XY_Toolbox_105.dll\" (");
-                sb.AppendLine("    copy /y \"XY_Toolbox_105.dll\" \"XY_Toolbox.dll\" >nul 2>&1");
+                sb.AppendLine("for %%f in (XY_Toolbox_*.dll) do (");
+                sb.AppendLine("    copy /y \"%%f\" \"XY_Toolbox.dll\" >nul 2>&1");
                 sb.AppendLine(")");
                 sb.AppendLine("");
                 sb.AppendLine(":: 5. 清理历史辅助批处理");

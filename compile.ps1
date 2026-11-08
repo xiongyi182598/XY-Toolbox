@@ -53,8 +53,8 @@ Write-Host "Compiling XY_Toolbox.dll..."
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Build success! Output: XY_Toolbox.dll" -ForegroundColor Green
-    Copy-Item -Path "XY_Toolbox.dll" -Destination "XY_Toolbox_105.dll" -Force -ErrorAction SilentlyContinue
-    Write-Host "Synced: XY_Toolbox_105.dll" -ForegroundColor Green
+    Copy-Item -Path "XY_Toolbox.dll" -Destination "XY_Toolbox_106.dll" -Force -ErrorAction SilentlyContinue
+    Write-Host "Synced: XY_Toolbox_106.dll" -ForegroundColor Green
 } else {
     Write-Host "Build failed with exit code: $LASTEXITCODE" -ForegroundColor Red
 }
