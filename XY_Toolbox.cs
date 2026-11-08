@@ -547,14 +547,16 @@ namespace XY_Deepening_Toolbox
             {
                 EnsureLspLoaded();
 
+                PaletteSettings settings = PaletteStateManager.LoadSettings();
+                int targetW = (settings.Width >= 200 && settings.Width <= 800) ? settings.Width : 260;
+                int targetH = (settings.Height >= 300 && settings.Height <= 2000) ? settings.Height : 650;
+
                 if (_paletteSet == null)
                 {
                     _isInitializing = true;
-                    PaletteSettings settings = PaletteStateManager.LoadSettings();
 
-                    // 专有 GUID 保证与 AutoCAD Profile 工作空间的长期亲和
-                    Guid paletteGuid = new Guid("98A6F14B-4E77-4C3D-9A2E-8E56B1D4F024");
-                    _paletteSet = new PaletteSet("XY工具箱 v" + UpdateService.CURRENT_VERSION, paletteGuid);
+                    // 1. 创建 PaletteSet，不绑定固定 GUID 避免与 AutoCAD 注册表历史异常状态冲突
+                    _paletteSet = new PaletteSet("XY工具箱 v" + UpdateService.CURRENT_VERSION);
                     _paletteSet.Style = PaletteSetStyles.ShowAutoHideButton | 
                                         PaletteSetStyles.ShowCloseButton |
                                         PaletteSetStyles.ShowPropertiesMenu |
@@ -565,28 +567,33 @@ namespace XY_Deepening_Toolbox
                     _control = new ToolboxControl();
                     _paletteSet.Add("XY工具箱 v" + UpdateService.CURRENT_VERSION, _control);
 
-                    // 1. 根据配置先设置停靠与尺寸（先设置 Dock / Location，再 Visible）
-                    if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
-                    {
-                        try { _paletteSet.Dock = settings.DockSide; } catch { }
-                        if (settings.Width > 200)
-                        {
-                            try { _paletteSet.Size = new Size(settings.Width, _paletteSet.Size.Height); } catch { }
-                        }
-                    }
-                    else
-                    {
-                        try { _paletteSet.Dock = DockSides.None; } catch { }
-                        int fx = settings.FloatingX > 0 ? settings.FloatingX : 300;
-                        int fy = settings.FloatingY > 0 ? settings.FloatingY : 150;
-                        try { _paletteSet.Location = new Point(fx, fy); } catch { }
-                        if (settings.Width > 200 && settings.Height > 300)
-                        {
-                            try { _paletteSet.Size = new Size(settings.Width, settings.Height); } catch { }
-                        }
-                    }
+                    // 2. 先设置安全尺寸（确保高度绝不为 0）
+                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
 
-                    // 2. 设置自动折叠隐藏
+                    // 3. 必须先置为可见，AutoCAD 才能创建底层 Win32 HWND 容器
+                    _paletteSet.Visible = true;
+
+                    // 4. 应用吸附停靠方位：首次默认固定吸附在右侧；之后跟随用户习惯 (左侧/右侧/浮动)
+                    try
+                    {
+                        if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
+                        {
+                            _paletteSet.Dock = settings.DockSide;
+                        }
+                        else
+                        {
+                            _paletteSet.Dock = DockSides.None;
+                            int fx = (settings.FloatingX > 0 && settings.FloatingX < 3000) ? settings.FloatingX : 300;
+                            int fy = (settings.FloatingY > 0 && settings.FloatingY < 2000) ? settings.FloatingY : 150;
+                            _paletteSet.Location = new Point(fx, fy);
+                        }
+                    }
+                    catch { }
+
+                    // 5. 确保停靠后尺寸健康 (再次确认，防止被第三方插件如海龙挤压)
+                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
+
+                    // 6. 设置自动折叠隐藏 (AutoRollUp)
                     try
                     {
                         _paletteSet.AutoRollUp = settings.AutoRollUp;
@@ -597,19 +604,7 @@ namespace XY_Deepening_Toolbox
                     }
                     catch { }
 
-                    // 3. 置为可见
-                    _paletteSet.Visible = true;
-
-                    // 4. 再次确认停靠属性已生效（防止 AutoCAD 在置可见时被系统内部默认值重置）
-                    if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
-                    {
-                        if (_paletteSet.Dock != settings.DockSide)
-                        {
-                            try { _paletteSet.Dock = settings.DockSide; } catch { }
-                        }
-                    }
-
-                    // 5. 挂接生命周期与用户交互事件（带防冲刷拦截）
+                    // 7. 挂接生命周期与用户交互事件（带防冲刷拦截）
                     if (!_paletteEventsHooked)
                     {
                         _paletteEventsHooked = true;
@@ -621,10 +616,10 @@ namespace XY_Deepening_Toolbox
                         _paletteSet.PaletteSetTitleBarLocationChange += (s, e) => { if (!_isInitializing) PaletteStateManager.SaveSettings(_paletteSet); };
                     }
 
-                    // 6. 初始化完成，解除防冲刷锁
+                    // 8. 初始化完成，解除防冲刷锁
                     _isInitializing = false;
 
-                    // 首次运行或初始加载落盘固化
+                    // 9. 首次运行或初始加载落盘固化
                     PaletteStateManager.SaveSettings(_paletteSet);
                     return;
                 }
@@ -635,22 +630,34 @@ namespace XY_Deepening_Toolbox
                     _paletteSet[0].Name = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
                 }
 
+                // 用户再次敲击 XGJ / XYSZ 时的自愈与呼出逻辑：
                 if (!_paletteSet.Visible)
                 {
                     _paletteSet.Visible = true;
+                    _paletteSet.RolledUp = false;
+                    if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 200)
+                    {
+                        try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
+                    }
                     PaletteStateManager.SaveSettings(_paletteSet);
+                }
+                else if (_paletteSet.RolledUp)
+                {
+                    _paletteSet.RolledUp = false;
+                }
+                else if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 200)
+                {
+                    // 尺寸被挤压折叠异常：自愈恢复尺寸并确保停靠，绝不隐藏
+                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
+                    if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
+                    {
+                        try { _paletteSet.Dock = settings.DockSide; } catch { }
+                    }
                 }
                 else
                 {
-                    if (_paletteSet.RolledUp)
-                    {
-                        _paletteSet.RolledUp = false;
-                    }
-                    else
-                    {
-                        _paletteSet.Visible = false;
-                        PaletteStateManager.SaveSettings(_paletteSet);
-                    }
+                    _paletteSet.Visible = false;
+                    PaletteStateManager.SaveSettings(_paletteSet);
                 }
             }
             catch
