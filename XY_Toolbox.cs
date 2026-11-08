@@ -503,6 +503,23 @@ namespace XY_Deepening_Toolbox
             public int Bottom;
         }
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        private const int SW_MAXIMIZE = 3;
+
+        public static void RestoreCadMainWindow()
+        {
+            try
+            {
+                IntPtr hMain = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
+                if (hMain != IntPtr.Zero)
+                {
+                    ShowWindow(hMain, SW_MAXIMIZE);
+                }
+            }
+            catch { }
+        }
+
         public static void EnforceDockedPaletteWidth(PaletteSet ps, int targetWidth)
         {
             if (ps == null) return;
@@ -510,51 +527,6 @@ namespace XY_Deepening_Toolbox
             {
                 ps.MinimumSize = new Size(70, 200);
                 ps.Size = new Size(targetWidth, ps.Size.Height);
-
-                IntPtr hPs = ps.Handle;
-                if (hPs != IntPtr.Zero)
-                {
-                    RECT rcPs;
-                    if (GetWindowRect(hPs, out rcPs))
-                    {
-                        int curH = rcPs.Bottom - rcPs.Top;
-                        SetWindowPos(hPs, IntPtr.Zero, 0, 0, targetWidth, curH, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
-                    }
-
-                    IntPtr hCurr = hPs;
-                    for (int level = 0; level < 6; level++)
-                    {
-                        IntPtr hParent = GetParent(hCurr);
-                        if (hParent == IntPtr.Zero) break;
-
-                        System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
-                        GetClassName(hParent, sb, 256);
-                        string cls = sb.ToString();
-
-                        RECT rcP;
-                        if (GetWindowRect(hParent, out rcP))
-                        {
-                            int curW = rcP.Right - rcP.Left;
-                            int curH = rcP.Bottom - rcP.Top;
-
-                            if (curW > targetWidth + 5 && (cls.IndexOf("Dock", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                          cls.IndexOf("Bar", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                          cls.IndexOf("Afx", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                          cls.IndexOf("Palette", StringComparison.OrdinalIgnoreCase) >= 0))
-                            {
-                                SetWindowPos(hParent, IntPtr.Zero, 0, 0, targetWidth, curH, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
-                            }
-                        }
-
-                        hCurr = hParent;
-                    }
-
-                    try
-                    {
-                        ps.RecalculateDockSiteLayout();
-                    }
-                    catch { }
-                }
             }
             catch { }
         }
@@ -639,6 +611,7 @@ namespace XY_Deepening_Toolbox
         {
             try
             {
+                RestoreCadMainWindow();
                 EnsureLspLoaded();
 
                 PaletteSettings settings = PaletteStateManager.LoadSettings();
@@ -649,8 +622,9 @@ namespace XY_Deepening_Toolbox
                 {
                     _isInitializing = true;
 
-                    // 1. 创建 PaletteSet，不绑定固定 GUID 避免与 AutoCAD 注册表历史异常状态冲突
-                    _paletteSet = new PaletteSet("XY工具箱 v" + UpdateService.CURRENT_VERSION);
+                    // 1. 创建 PaletteSet，分配独立 GUID 彻底重置 AutoCAD 历史过宽缓存
+                    Guid paletteId = new Guid("7F4A2B9C-5D1E-4A8F-9C3E-2B1A0D8F7E6A");
+                    _paletteSet = new PaletteSet("XY工具箱", paletteId);
                     _paletteSet.Style = PaletteSetStyles.ShowAutoHideButton | 
                                         PaletteSetStyles.ShowCloseButton |
                                         PaletteSetStyles.ShowPropertiesMenu |
@@ -659,9 +633,12 @@ namespace XY_Deepening_Toolbox
                     _paletteSet.DockEnabled = DockSides.Right | DockSides.Left;
 
                     _control = new ToolboxControl();
-                    _paletteSet.Add("XY工具箱 v" + UpdateService.CURRENT_VERSION, _control);
+                    _paletteSet.Add("XY工具箱", _control);
 
-                    // 2. 停靠方位预设
+                    // 2. 核心：在 Dock 之前先设置 Size，AutoCAD 才会以 108px 初始化停靠列
+                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
+
+                    // 3. 停靠方位预设
                     if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
                     {
                         try { _paletteSet.Dock = settings.DockSide; } catch { }
@@ -678,12 +655,7 @@ namespace XY_Deepening_Toolbox
                         catch { }
                     }
 
-                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
-
                     _paletteSet.Visible = true;
-
-                    // 3. 核心：物理强制收缩 AutoCAD MFC 停靠容器栏，对齐海龙/天正紧凑宽度 (108px)
-                    EnforceDockedPaletteWidth(_paletteSet, targetW);
 
                     // 4. 设置自动折叠隐藏 (AutoRollUp)
                     try
@@ -716,10 +688,10 @@ namespace XY_Deepening_Toolbox
                     return;
                 }
 
-                _paletteSet.Text = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
+                _paletteSet.Text = "XY工具箱";
                 if (_paletteSet.Count > 0)
                 {
-                    _paletteSet[0].Name = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
+                    _paletteSet[0].Name = "XY工具箱";
                 }
 
                 // 用户再次敲击 XGJ / XYSZ 时的自愈与呼出逻辑：
@@ -4542,9 +4514,7 @@ namespace XY_Deepening_Toolbox
 
     public class ToolboxControl : UserControl
     {
-        private Panel pnlHeader;
         private Panel pnlBody;
-        private PictureBox picLogo;
         private ToolTip toolTipHelp;
 
         private class CategorySection
@@ -4585,125 +4555,7 @@ namespace XY_Deepening_Toolbox
             toolTipHelp.ReshowDelay = 150;
             toolTipHelp.ShowAlways = true;
 
-            // 1. 顶部纯净 Header (海龙纯正炭黑底色，反转亮白Logo + 锐利精细标题)
-            pnlHeader = new Panel();
-            pnlHeader.Dock = DockStyle.Top;
-            pnlHeader.Height = 24;
-            pnlHeader.BackColor = Color.FromArgb(18, 20, 25);
-
-            picLogo = new PictureBox();
-            picLogo.Location = new Point(4, 4);
-            picLogo.Size = new Size(16, 16);
-            picLogo.SizeMode = PictureBoxSizeMode.Zoom;
-            try
-            {
-                Bitmap whiteLogo = Commands.GetInvertedWhiteLogo();
-                if (whiteLogo != null)
-                {
-                    picLogo.Image = whiteLogo;
-                }
-            }
-            catch { }
-            pnlHeader.Controls.Add(picLogo);
-
-            Label lblTitle = new Label();
-            lblTitle.Text = "XY工具箱";
-            lblTitle.Font = new Font("SimSun", 9F, FontStyle.Bold);
-            lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(22, 5);
-            lblTitle.AutoSize = true;
-            lblTitle.UseCompatibleTextRendering = true;
-            toolTipHelp.SetToolTip(lblTitle, "XY工具箱 v" + UpdateService.CURRENT_VERSION + "\n输入 XGX 检查更新，输入 XKJ 设置快捷键");
-            toolTipHelp.SetToolTip(picLogo, "XY工具箱 v" + UpdateService.CURRENT_VERSION);
-            pnlHeader.Controls.Add(lblTitle);
-
-            Label btnClose = new Label();
-            btnClose.Text = "✕";
-            btnClose.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
-            btnClose.ForeColor = Color.FromArgb(160, 170, 185);
-            btnClose.Location = new Point(88, 3);
-            btnClose.Size = new Size(16, 16);
-            btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnClose.TextAlign = ContentAlignment.MiddleCenter;
-            btnClose.Cursor = Cursors.Hand;
-            toolTipHelp.SetToolTip(btnClose, "关闭工作台 (快捷键 XGJ 随时重新呼出)");
-            btnClose.MouseEnter += (s, e) => { btnClose.ForeColor = Color.FromArgb(240, 80, 80); };
-            btnClose.MouseLeave += (s, e) => { btnClose.ForeColor = Color.FromArgb(160, 170, 185); };
-            btnClose.Click += (s, e) => {
-                if (Commands.PaletteSetInstance != null)
-                {
-                    Commands.PaletteSetInstance.Visible = false;
-                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
-                }
-                else if (this.ParentForm != null)
-                {
-                    this.ParentForm.Hide();
-                }
-            };
-            pnlHeader.Controls.Add(btnClose);
-
-            Label btnMini = new Label();
-            btnMini.Text = "─";
-            btnMini.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
-            btnMini.ForeColor = Color.FromArgb(160, 170, 185);
-            btnMini.Location = new Point(70, 3);
-            btnMini.Size = new Size(16, 16);
-            btnMini.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnMini.TextAlign = ContentAlignment.MiddleCenter;
-            btnMini.Cursor = Cursors.Hand;
-            toolTipHelp.SetToolTip(btnMini, "折叠 / 展开工作台面板 (或双击标题栏)");
-            btnMini.MouseEnter += (s, e) => { btnMini.ForeColor = Color.White; };
-            btnMini.MouseLeave += (s, e) => { btnMini.ForeColor = Color.FromArgb(160, 170, 185); };
-            btnMini.Click += (s, e) => {
-                if (Commands.PaletteSetInstance != null)
-                {
-                    Commands.PaletteSetInstance.AutoRollUp = !Commands.PaletteSetInstance.AutoRollUp;
-                    if (Commands.PaletteSetInstance.AutoRollUp)
-                    {
-                        Commands.PaletteSetInstance.RolledUp = true;
-                    }
-                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
-                }
-                else
-                {
-                    ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
-                    if (tf != null) tf.ToggleMiniMode();
-                }
-            };
-            pnlHeader.Controls.Add(btnMini);
-
-            // 绑定鼠标左键按住拖动窗口与双击折叠
-            MouseEventHandler handleDrag = (s, e) => {
-                if (e.Button == MouseButtons.Left && this.ParentForm != null)
-                {
-                    Commands.ReleaseCapture();
-                    Commands.SendMessage(this.ParentForm.Handle, 0xA1, 0x2, 0);
-                }
-            };
-            pnlHeader.MouseDown += handleDrag;
-            lblTitle.MouseDown += handleDrag;
-            picLogo.MouseDown += handleDrag;
-
-            EventHandler handleDblClick = (s, e) => {
-                if (Commands.PaletteSetInstance != null)
-                {
-                    Commands.PaletteSetInstance.AutoRollUp = !Commands.PaletteSetInstance.AutoRollUp;
-                    if (Commands.PaletteSetInstance.AutoRollUp)
-                    {
-                        Commands.PaletteSetInstance.RolledUp = true;
-                    }
-                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
-                }
-                else
-                {
-                    ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
-                    if (tf != null) tf.ToggleMiniMode();
-                }
-            };
-            pnlHeader.DoubleClick += handleDblClick;
-            lblTitle.DoubleClick += handleDblClick;
-
-            this.Controls.Add(pnlHeader);
+            // 纯净紧凑模式：移除内部多余 Header 与 ─/✕ 按钮，对齐海龙与天正纯粹直通布局
 
             // 2. 中间卡片手风琴容器 (海龙 1:1 炭黑底色 #21252C，单行高密度)
             pnlBody = new Panel();

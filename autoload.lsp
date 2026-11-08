@@ -5,6 +5,9 @@
 
 (vl-load-com)
 
+;; 辉复 AutoCAD 主窗口为最大化正常状态
+(vl-catch-all-apply '(lambda () (vla-put-windowstate (vlax-get-acad-object) 3)))
+
 ;; 解除高版 AutoCAD 安全拦截机制并允许全文档加载 (借鉴海龙与源泉)
 (if (getvar "SECURELOAD") (setvar "SECURELOAD" 0))
 (if (getvar "ACADLSPASDOC") (setvar "ACADLSPASDOC" 1))
