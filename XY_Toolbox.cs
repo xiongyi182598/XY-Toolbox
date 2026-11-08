@@ -148,7 +148,7 @@ namespace XY_Deepening_Toolbox
             Visible = true;              // 默认显示
             FloatingX = -1;
             FloatingY = -1;
-            Width = 150;                // 经典紧凑宽度 150px (对齐海龙/天正，杜绝右侧空白过宽)
+            Width = 108;                // 经典紧凑宽度 108px (严格对齐海龙~110px/天正~96px，彻底杜绝空白)
             Height = 650;
         }
     }
@@ -256,10 +256,10 @@ namespace XY_Deepening_Toolbox
                     }
                 }
 
-                // 优化旧版过宽的默认值：旧版默认 260px 右侧留白过多，新版统一对齐海龙/天正精简紧凑宽度 150px
-                if (settings.Width >= 230 && settings.Width <= 280)
+                // 优化旧版过宽的默认值：旧版默认 260px/150px 右侧留白过多，新版统一对齐海龙/天正精简紧凑宽度 108px
+                if (settings.Width > 115 && settings.Width <= 500)
                 {
-                    settings.Width = 150;
+                    settings.Width = 108;
                 }
 
                 // 自愈保护：如果被误保存为 None 但并没有有效的浮动屏幕坐标，自动修正为默认右侧吸附
@@ -319,7 +319,13 @@ namespace XY_Deepening_Toolbox
                 {
                     if (ps.Size.Width > 50)
                     {
-                        sb.AppendLine("Width=" + ps.Size.Width);
+                        int saveW = ps.Size.Width;
+                        // 保护性收敛：防止 AutoCAD 停靠初始默认宽度 (240~280) 污染存盘
+                        if (saveW > 115 && saveW <= 300)
+                        {
+                            saveW = 108;
+                        }
+                        sb.AppendLine("Width=" + saveW);
                     }
                 }
 
@@ -471,6 +477,88 @@ namespace XY_Deepening_Toolbox
         [DllImport("user32.dll")]
         private static extern bool LockWindowUpdate(IntPtr hWndLock);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        public static void EnforceDockedPaletteWidth(PaletteSet ps, int targetWidth)
+        {
+            if (ps == null) return;
+            try
+            {
+                ps.MinimumSize = new Size(70, 200);
+                ps.Size = new Size(targetWidth, ps.Size.Height);
+
+                IntPtr hPs = ps.Handle;
+                if (hPs != IntPtr.Zero)
+                {
+                    RECT rcPs;
+                    if (GetWindowRect(hPs, out rcPs))
+                    {
+                        int curH = rcPs.Bottom - rcPs.Top;
+                        SetWindowPos(hPs, IntPtr.Zero, 0, 0, targetWidth, curH, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+                    }
+
+                    IntPtr hCurr = hPs;
+                    for (int level = 0; level < 6; level++)
+                    {
+                        IntPtr hParent = GetParent(hCurr);
+                        if (hParent == IntPtr.Zero) break;
+
+                        System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
+                        GetClassName(hParent, sb, 256);
+                        string cls = sb.ToString();
+
+                        RECT rcP;
+                        if (GetWindowRect(hParent, out rcP))
+                        {
+                            int curW = rcP.Right - rcP.Left;
+                            int curH = rcP.Bottom - rcP.Top;
+
+                            if (curW > targetWidth + 5 && (cls.IndexOf("Dock", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                          cls.IndexOf("Bar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                          cls.IndexOf("Afx", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                          cls.IndexOf("Palette", StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                SetWindowPos(hParent, IntPtr.Zero, 0, 0, targetWidth, curH, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+                            }
+                        }
+
+                        hCurr = hParent;
+                    }
+
+                    try
+                    {
+                        ps.RecalculateDockSiteLayout();
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
         [DllImport("accore.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode, EntryPoint = "acedEvaluateLisp")]
         private static extern int acedEvaluateLisp(string lispExpression, out IntPtr result);
 
@@ -554,7 +642,7 @@ namespace XY_Deepening_Toolbox
                 EnsureLspLoaded();
 
                 PaletteSettings settings = PaletteStateManager.LoadSettings();
-                int targetW = (settings.Width >= 120 && settings.Width <= 800) ? settings.Width : 150;
+                int targetW = (settings.Width >= 80 && settings.Width <= 500) ? settings.Width : 108;
                 int targetH = (settings.Height >= 300 && settings.Height <= 2000) ? settings.Height : 650;
 
                 if (_paletteSet == null)
@@ -567,39 +655,37 @@ namespace XY_Deepening_Toolbox
                                         PaletteSetStyles.ShowCloseButton |
                                         PaletteSetStyles.ShowPropertiesMenu |
                                         PaletteSetStyles.Snappable;
-                    _paletteSet.MinimumSize = new Size(120, 300);
+                    _paletteSet.MinimumSize = new Size(70, 200);
                     _paletteSet.DockEnabled = DockSides.Right | DockSides.Left;
 
                     _control = new ToolboxControl();
                     _paletteSet.Add("XY工具箱 v" + UpdateService.CURRENT_VERSION, _control);
 
-                    // 2. 先设置安全尺寸（确保高度绝不为 0）
-                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
-
-                    // 3. 必须先置为可见，AutoCAD 才能创建底层 Win32 HWND 容器
-                    _paletteSet.Visible = true;
-
-                    // 4. 应用吸附停靠方位：首次默认固定吸附在右侧；之后跟随用户习惯 (左侧/右侧/浮动)
-                    try
+                    // 2. 停靠方位预设
+                    if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
                     {
-                        if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
-                        {
-                            _paletteSet.Dock = settings.DockSide;
-                        }
-                        else
+                        try { _paletteSet.Dock = settings.DockSide; } catch { }
+                    }
+                    else
+                    {
+                        try
                         {
                             _paletteSet.Dock = DockSides.None;
                             int fx = (settings.FloatingX > 0 && settings.FloatingX < 3000) ? settings.FloatingX : 300;
                             int fy = (settings.FloatingY > 0 && settings.FloatingY < 2000) ? settings.FloatingY : 150;
                             _paletteSet.Location = new Point(fx, fy);
                         }
+                        catch { }
                     }
-                    catch { }
 
-                    // 5. 确保停靠后尺寸健康 (再次确认，防止被第三方插件如海龙挤压)
                     try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
 
-                    // 6. 设置自动折叠隐藏 (AutoRollUp)
+                    _paletteSet.Visible = true;
+
+                    // 3. 核心：物理强制收缩 AutoCAD MFC 停靠容器栏，对齐海龙/天正紧凑宽度 (108px)
+                    EnforceDockedPaletteWidth(_paletteSet, targetW);
+
+                    // 4. 设置自动折叠隐藏 (AutoRollUp)
                     try
                     {
                         _paletteSet.AutoRollUp = settings.AutoRollUp;
@@ -610,7 +696,7 @@ namespace XY_Deepening_Toolbox
                     }
                     catch { }
 
-                    // 7. 挂接生命周期与用户交互事件（带防冲刷拦截）
+                    // 5. 挂接生命周期与用户交互事件（带防冲刷拦截）
                     if (!_paletteEventsHooked)
                     {
                         _paletteEventsHooked = true;
@@ -622,10 +708,10 @@ namespace XY_Deepening_Toolbox
                         _paletteSet.PaletteSetTitleBarLocationChange += (s, e) => { if (!_isInitializing) PaletteStateManager.SaveSettings(_paletteSet); };
                     }
 
-                    // 8. 初始化完成，解除防冲刷锁
+                    // 6. 初始化完成，解除防冲刷锁
                     _isInitializing = false;
 
-                    // 9. 首次运行或初始加载落盘固化
+                    // 7. 首次运行或初始加载落盘固化
                     PaletteStateManager.SaveSettings(_paletteSet);
                     return;
                 }
@@ -641,24 +727,13 @@ namespace XY_Deepening_Toolbox
                 {
                     _paletteSet.Visible = true;
                     _paletteSet.RolledUp = false;
-                    if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 120)
-                    {
-                        try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
-                    }
+                    EnforceDockedPaletteWidth(_paletteSet, targetW);
                     PaletteStateManager.SaveSettings(_paletteSet);
                 }
                 else if (_paletteSet.RolledUp)
                 {
                     _paletteSet.RolledUp = false;
-                }
-                else if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 120)
-                {
-                    // 尺寸被挤压折叠异常：自愈恢复尺寸并确保停靠，绝不隐藏
-                    try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
-                    if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
-                    {
-                        try { _paletteSet.Dock = settings.DockSide; } catch { }
-                    }
+                    EnforceDockedPaletteWidth(_paletteSet, targetW);
                 }
                 else
                 {
@@ -4513,12 +4588,12 @@ namespace XY_Deepening_Toolbox
             // 1. 顶部纯净 Header (海龙纯正炭黑底色，反转亮白Logo + 锐利精细标题)
             pnlHeader = new Panel();
             pnlHeader.Dock = DockStyle.Top;
-            pnlHeader.Height = 30;
+            pnlHeader.Height = 24;
             pnlHeader.BackColor = Color.FromArgb(18, 20, 25);
 
             picLogo = new PictureBox();
-            picLogo.Location = new Point(8, 5);
-            picLogo.Size = new Size(20, 20);
+            picLogo.Location = new Point(4, 4);
+            picLogo.Size = new Size(16, 16);
             picLogo.SizeMode = PictureBoxSizeMode.Zoom;
             try
             {
@@ -4535,7 +4610,7 @@ namespace XY_Deepening_Toolbox
             lblTitle.Text = "XY工具箱";
             lblTitle.Font = new Font("SimSun", 9F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(28, 7);
+            lblTitle.Location = new Point(22, 5);
             lblTitle.AutoSize = true;
             lblTitle.UseCompatibleTextRendering = true;
             toolTipHelp.SetToolTip(lblTitle, "XY工具箱 v" + UpdateService.CURRENT_VERSION + "\n输入 XGX 检查更新，输入 XKJ 设置快捷键");
@@ -4546,8 +4621,8 @@ namespace XY_Deepening_Toolbox
             btnClose.Text = "✕";
             btnClose.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
             btnClose.ForeColor = Color.FromArgb(160, 170, 185);
-            btnClose.Location = new Point(126, 5);
-            btnClose.Size = new Size(20, 20);
+            btnClose.Location = new Point(88, 3);
+            btnClose.Size = new Size(16, 16);
             btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnClose.TextAlign = ContentAlignment.MiddleCenter;
             btnClose.Cursor = Cursors.Hand;
@@ -4571,8 +4646,8 @@ namespace XY_Deepening_Toolbox
             btnMini.Text = "─";
             btnMini.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
             btnMini.ForeColor = Color.FromArgb(160, 170, 185);
-            btnMini.Location = new Point(104, 5);
-            btnMini.Size = new Size(20, 20);
+            btnMini.Location = new Point(70, 3);
+            btnMini.Size = new Size(16, 16);
             btnMini.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnMini.TextAlign = ContentAlignment.MiddleCenter;
             btnMini.Cursor = Cursors.Hand;
@@ -4668,8 +4743,8 @@ namespace XY_Deepening_Toolbox
             AddItemRowToSection(sec1, "🔍", "图元探测", "XTC", 
                 "图元探测 (XTC)\n穿透多重复杂嵌套图块，直接探测深层子图元属性与文字", 
                 () => SendCadCommand("XTC "));
-            AddItemRowToSection(sec1, "🔬", "图层对比", "LYCOMPARE", 
-                "图层对比 (LYCOMPARE)\n加载引用图纸，自动比对图层/线型/颜色，智能评分并一键合并", 
+            AddItemRowToSection(sec1, "🔬", "图层对比", "LYC", 
+                "图层对比 (LYC / LYCOMPARE)\n加载引用图纸，自动比对图层/线型/颜色，智能评分并一键合并", 
                 () => Commands.ShowLayerCompareDialog());
             AddItemRowToSection(sec1, "👁️", "视口图层", "SK", 
                 "视口图层 (SK / SKYS)\n悬浮弹窗穿透拾取图层，快速修改当前视口的颜色与线型覆盖", 
@@ -4732,18 +4807,18 @@ namespace XY_Deepening_Toolbox
             sec.IsExpanded = defaultExpanded;
             sec.ContentHeight = 0;
 
-            // 头部折叠条 Panel (海龙标准紧凑高 23px)
+            // 头部折叠条 Panel (海龙标准紧凑高 22px)
             Panel pnlH = new Panel();
-            pnlH.Height = 23;
+            pnlH.Height = 22;
             pnlH.Cursor = Cursors.Hand;
             pnlH.BackColor = defaultExpanded ? Color.FromArgb(36, 42, 52) : Color.FromArgb(28, 32, 40);
 
             Label arrow = new Label();
             arrow.Text = defaultExpanded ? "▼" : "▶";
-            arrow.Font = new Font("SimSun", 7.5F, FontStyle.Regular);
+            arrow.Font = new Font("SimSun", 7F, FontStyle.Regular);
             arrow.ForeColor = defaultExpanded ? Color.FromArgb(97, 175, 239) : Color.FromArgb(160, 170, 185);
-            arrow.Location = new Point(4, 4);
-            arrow.Size = new Size(16, 15);
+            arrow.Location = new Point(2, 4);
+            arrow.Size = new Size(12, 14);
             arrow.UseCompatibleTextRendering = true;
             pnlH.Controls.Add(arrow);
             sec.ArrowLabel = arrow;
@@ -4752,8 +4827,8 @@ namespace XY_Deepening_Toolbox
             lblTitle.Text = title;
             lblTitle.Font = new Font("SimSun", 9F, FontStyle.Regular);
             lblTitle.ForeColor = Color.FromArgb(235, 240, 245);
-            lblTitle.Location = new Point(22, 4);
-            lblTitle.Size = new Size(160, 16);
+            lblTitle.Location = new Point(16, 4);
+            lblTitle.Size = new Size(86, 14);
             lblTitle.UseCompatibleTextRendering = true;
             pnlH.Controls.Add(lblTitle);
 
@@ -4813,7 +4888,7 @@ namespace XY_Deepening_Toolbox
 
             Panel row = new Panel();
             row.Location = new Point(0, rowY);
-            row.Size = new Size(146, rowH);
+            row.Size = new Size(104, rowH);
             row.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             row.BackColor = Color.FromArgb(22, 25, 31);
             row.Cursor = Cursors.Hand;
@@ -4821,22 +4896,21 @@ namespace XY_Deepening_Toolbox
             // 1. 图标 Glyph (16x16 视觉)
             Label lblIcon = new Label();
             lblIcon.Text = iconGlyph;
-            lblIcon.Font = new Font("Segoe UI Emoji", 8.5F, FontStyle.Regular);
+            lblIcon.Font = new Font("Segoe UI Emoji", 8F, FontStyle.Regular);
             lblIcon.ForeColor = Color.White;
-            lblIcon.Location = new Point(4, 2);
-            lblIcon.Size = new Size(18, 17);
+            lblIcon.Location = new Point(2, 2);
+            lblIcon.Size = new Size(16, 17);
             lblIcon.TextAlign = ContentAlignment.MiddleCenter;
             lblIcon.UseCompatibleTextRendering = false;
             row.Controls.Add(lblIcon);
 
             // 2. 功能名与快捷键合一 (海龙1:1经典排版: "图层合并<xhb>")
-            // 采用天正/海龙经典宋体 SimSun 9F，细致精悍，绝不粗胀发黑
             Label lblText = new Label();
             lblText.Text = string.Format("{0}<{1}>", title, hotkey.ToLower());
             lblText.Font = new Font("SimSun", 9F, FontStyle.Regular);
             lblText.ForeColor = Color.FromArgb(245, 245, 245);
-            lblText.Location = new Point(22, 4);
-            lblText.Size = new Size(row.Width - 24, 16);
+            lblText.Location = new Point(18, 3);
+            lblText.Size = new Size(row.Width - 20, 16);
             lblText.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             lblText.AutoEllipsis = true;
             lblText.UseCompatibleTextRendering = true;
@@ -4851,7 +4925,7 @@ namespace XY_Deepening_Toolbox
             row.Paint += (s, e) => {
                 using (Pen p = new Pen(Color.FromArgb(28, 32, 40)))
                 {
-                    e.Graphics.DrawLine(p, 4, row.Height - 1, row.Width - 4, row.Height - 1);
+                    e.Graphics.DrawLine(p, 2, row.Height - 1, row.Width - 2, row.Height - 1);
                 }
             };
 
@@ -4891,26 +4965,26 @@ namespace XY_Deepening_Toolbox
         private void RelayoutSections()
         {
             pnlBody.SuspendLayout();
-            int currentY = 6;
-            int availWidth = pnlBody.ClientSize.Width - 8;
-            if (availWidth < 180) availWidth = 230;
+            int currentY = 4;
+            int availWidth = pnlBody.ClientSize.Width - 4;
+            if (availWidth < 60) availWidth = 100;
 
             foreach (CategorySection sec in _sections)
             {
-                sec.HeaderPanel.Location = new Point(4, currentY);
+                sec.HeaderPanel.Location = new Point(2, currentY);
                 sec.HeaderPanel.Width = availWidth;
                 currentY += sec.HeaderPanel.Height;
 
                 if (sec.IsExpanded)
                 {
                     sec.ContentPanel.Visible = true;
-                    sec.ContentPanel.Location = new Point(4, currentY);
+                    sec.ContentPanel.Location = new Point(2, currentY);
                     sec.ContentPanel.Width = availWidth;
                     foreach (Control row in sec.ContentPanel.Controls)
                     {
                         row.Width = availWidth;
                     }
-                    currentY += sec.ContentHeight + 4;
+                    currentY += sec.ContentHeight + 2;
                 }
                 else
                 {
@@ -4919,6 +4993,36 @@ namespace XY_Deepening_Toolbox
             }
 
             pnlBody.ResumeLayout();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try
+            {
+                this.BeginInvoke(new Action(() => {
+                    if (Commands.PaletteSetInstance != null)
+                    {
+                        Commands.EnforceDockedPaletteWidth(Commands.PaletteSetInstance, 108);
+                    }
+                }));
+            }
+            catch { }
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (this.Visible && Commands.PaletteSetInstance != null)
+            {
+                try
+                {
+                    this.BeginInvoke(new Action(() => {
+                        Commands.EnforceDockedPaletteWidth(Commands.PaletteSetInstance, 108);
+                    }));
+                }
+                catch { }
+            }
         }
 
         private void SendCadCommand(string cmd)
@@ -4954,9 +5058,9 @@ namespace XY_Deepening_Toolbox
             this.ShowInTaskbar = false;
             this.StartPosition = FormStartPosition.Manual;
             this.BackColor = Color.FromArgb(18, 20, 25);
-            this.Width = 150;
+            this.Width = 108;
             this.Height = _expandedHeight;
-            this.MinimumSize = new Size(120, MINI_HEIGHT);
+            this.MinimumSize = new Size(80, MINI_HEIGHT);
             this.DoubleBuffered = true;
 
             InitPosition();
