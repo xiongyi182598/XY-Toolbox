@@ -44,7 +44,7 @@ proxy_handler = urllib.request.ProxyHandler({'http': 'socks5h://127.0.0.1:10808'
 opener = urllib.request.build_opener(proxy_handler)
 
 REPO = "xiongyi182598/XY-Toolbox"
-TAG = "v1.0.4"
+TAG = "v1.0.5"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(BASE_DIR, "发布成果物")
 
@@ -69,8 +69,8 @@ except urllib.error.HTTPError as e:
         post_data = json.dumps({
             "tag_name": TAG,
             "target_commitish": "main",
-            "name": f"XY工具箱 {TAG} 纯净稳定正式版",
-            "body": "### XY工具箱 v1.0.2 纯净稳定正式版\n\n1. **彻底解决 AutoCAD 2024 与天正建筑 T30 下 XGJ 致命错误 (Access Violation) 崩溃**；\n2. **完美恢复侧边栏原生吸附与停靠功能**，支持左右任意边缘吸附与自动隐藏；\n3. **彻底根除输入法智能切换 Bug**：绘图敲命令 100% 保持纯英文半角，绝不再误转中文拼音；\n4. **升级在线更新服务**：支持国内全网 8 大高速镜像与防本地代理死锁，支持在 CAD 内敲 `XGX` 一键自动静默升级。\n\n#### 下载说明：\n- **全新安装/远端部署**：请下载 `XY工具箱_v1.0.2_完整绿色独立版.zip`，解压即用；\n- **在线自动更新**：CAD 内部敲 `XGX` 会自动下载 `XY_Toolbox_Update.zip` 极速热更新。",
+            "name": f"XY工具箱 {TAG} 侧边吸附记忆与智能输入法纯净版",
+            "body": "### XY工具箱 v1.0.5 侧边吸附记忆与智能输入法纯净版\n\n1. **【面板吸附记忆】首次启动默认停靠吸附于 CAD 右侧**，彻底消除浮动遮挡；全面记忆用户停靠习惯（左侧/右侧固定吸附、吸附并折叠隐藏/自动收缩、浮动位置及尺寸），下次启动自动精准还原；\n2. **【智能输入法隔离】彻底修复输入法状态污染外部软件的Bug**：搜狗与微软输入法仅在 AutoCAD 进程窗口内部生效，切换到微信/浏览器/记事本等外部程序时保持原样，绝无干扰；\n3. **【极速盲打与文字秒切】画图命令100%纯英文盲打**，写字改字（T/MT/DT/ED/天正文字等）自动秒切中文，退出自动还原英文；\n4. **【在线升级管线】在线更新支持多镜像极速下载与多版本无缝热切换**。\n\n#### 下载说明：\n- **全新安装/远端部署**：请下载 `XY工具箱_v1.0.5_完整绿色独立版.zip`，解压即用；\n- **在线自动更新**：CAD 内部敲 `XGX` 会自动下载 `XY_Toolbox_Update.zip` 极速热更新。",
             "draft": False,
             "prerelease": False
         }).encode('utf-8')

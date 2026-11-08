@@ -71,14 +71,198 @@ namespace XY_Deepening_Toolbox
             try
             {
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnCadIdle;
-                Commands.ShowToolboxPalette();
+                PaletteSettings settings = PaletteStateManager.LoadSettings();
+                // 首次打开或者用户上次使用时保持可见，自动呼出工作台
+                if (!settings.IsInitialized || settings.Visible)
+                {
+                    Commands.ShowToolboxPalette();
+                }
             }
             catch { }
         }
 
         public void Terminate()
         {
+            try
+            {
+                if (Commands.PaletteSetInstance != null)
+                {
+                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
+                }
+            }
+            catch { }
             Commands.CleanupExistingPalettes();
+        }
+    }
+
+    // ========================================================
+    // 工作台面板持久化状态配置与用户习惯记忆系统 (PaletteStateManager)
+    // 1. 首次打开：强制默认固定吸附在 AutoCAD 最右侧，绝不悬浮遮挡视口；
+    // 2. 状态跟随：完全精准记忆用户的停靠方位 (左侧/右侧)、折叠隐藏 (AutoRollUp)、浮动尺寸与坐标；
+    // 3. 闭环存储：每次状态改变与 CAD 关闭时自动存入 palette_state.ini，再次打开无缝恢复。
+    // ========================================================
+    public class PaletteSettings
+    {
+        public bool IsInitialized { get; set; }
+        public DockSides DockSide { get; set; }
+        public bool AutoRollUp { get; set; }
+        public bool Visible { get; set; }
+        public int FloatingX { get; set; }
+        public int FloatingY { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+
+        public PaletteSettings()
+        {
+            IsInitialized = false;
+            DockSide = DockSides.Right; // 首次打开默认固定吸附在 CAD 右侧
+            AutoRollUp = false;          // 默认展开
+            Visible = true;              // 默认显示
+            FloatingX = 300;
+            FloatingY = 150;
+            Width = 260;
+            Height = 650;
+        }
+    }
+
+    public static class PaletteStateManager
+    {
+        private static string GetConfigPath()
+        {
+            try
+            {
+                string lspPath = Commands.FindToolboxFile("autoload.lsp");
+                if (!string.IsNullOrEmpty(lspPath) && System.IO.File.Exists(lspPath))
+                {
+                    string dir = System.IO.Path.GetDirectoryName(lspPath);
+                    if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
+                        return System.IO.Path.Combine(dir, "palette_state.ini");
+                }
+            }
+            catch { }
+            try
+            {
+                string asmLoc = typeof(Commands).Assembly.Location;
+                if (!string.IsNullOrEmpty(asmLoc))
+                {
+                    string asmDir = System.IO.Path.GetDirectoryName(asmLoc);
+                    if (!string.IsNullOrEmpty(asmDir) && System.IO.Directory.Exists(asmDir))
+                        return System.IO.Path.Combine(asmDir, "palette_state.ini");
+                }
+            }
+            catch { }
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                if (!string.IsNullOrEmpty(baseDir))
+                    return System.IO.Path.Combine(baseDir, "palette_state.ini");
+            }
+            catch { }
+            return "palette_state.ini";
+        }
+
+        public static PaletteSettings LoadSettings()
+        {
+            PaletteSettings settings = new PaletteSettings();
+            string path = GetConfigPath();
+            if (!System.IO.File.Exists(path))
+            {
+                // 首次打开：返回默认值 (右侧固定吸附，不折叠，可见)
+                return settings;
+            }
+
+            try
+            {
+                string[] lines = System.IO.File.ReadAllLines(path, System.Text.Encoding.UTF8);
+                foreach (string rawLine in lines)
+                {
+                    string line = rawLine.Trim();
+                    if (string.IsNullOrEmpty(line) || line.StartsWith(";") || line.StartsWith("#") || line.StartsWith("["))
+                        continue;
+
+                    int idx = line.IndexOf('=');
+                    if (idx > 0)
+                    {
+                        string key = line.Substring(0, idx).Trim();
+                        string val = line.Substring(idx + 1).Trim();
+
+                        if (key.Equals("IsInitialized", StringComparison.OrdinalIgnoreCase))
+                        {
+                            settings.IsInitialized = (val == "1" || val.Equals("true", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else if (key.Equals("DockSide", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (val.Equals("Left", StringComparison.OrdinalIgnoreCase))
+                                settings.DockSide = DockSides.Left;
+                            else if (val.Equals("Right", StringComparison.OrdinalIgnoreCase))
+                                settings.DockSide = DockSides.Right;
+                            else if (val.Equals("None", StringComparison.OrdinalIgnoreCase))
+                                settings.DockSide = DockSides.None;
+                            else
+                                settings.DockSide = DockSides.Right;
+                        }
+                        else if (key.Equals("AutoRollUp", StringComparison.OrdinalIgnoreCase))
+                        {
+                            settings.AutoRollUp = (val == "1" || val.Equals("true", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else if (key.Equals("Visible", StringComparison.OrdinalIgnoreCase))
+                        {
+                            settings.Visible = (val == "1" || val.Equals("true", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else if (key.Equals("FloatingX", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int x; if (int.TryParse(val, out x)) settings.FloatingX = x;
+                        }
+                        else if (key.Equals("FloatingY", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int y; if (int.TryParse(val, out y)) settings.FloatingY = y;
+                        }
+                        else if (key.Equals("Width", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int w; if (int.TryParse(val, out w)) settings.Width = w;
+                        }
+                        else if (key.Equals("Height", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int h; if (int.TryParse(val, out h)) settings.Height = h;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return settings;
+        }
+
+        public static void SaveSettings(PaletteSet ps)
+        {
+            if (ps == null) return;
+            try
+            {
+                string path = GetConfigPath();
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                sb.AppendLine("[PaletteState]");
+                sb.AppendLine("IsInitialized=1");
+
+                string dockStr = "Right";
+                if (ps.Dock == DockSides.Left) dockStr = "Left";
+                else if (ps.Dock == DockSides.Right) dockStr = "Right";
+                else dockStr = "None";
+
+                sb.AppendLine("DockSide=" + dockStr);
+                sb.AppendLine("AutoRollUp=" + (ps.AutoRollUp ? "1" : "0"));
+                sb.AppendLine("Visible=" + (ps.Visible ? "1" : "0"));
+
+                if (ps.Dock == DockSides.None)
+                {
+                    sb.AppendLine("FloatingX=" + ps.Location.X);
+                    sb.AppendLine("FloatingY=" + ps.Location.Y);
+                }
+                sb.AppendLine("Width=" + ps.Size.Width);
+                sb.AppendLine("Height=" + ps.Size.Height);
+
+                System.IO.File.WriteAllText(path, sb.ToString(), System.Text.Encoding.UTF8);
+            }
+            catch { }
         }
     }
 
@@ -104,15 +288,46 @@ namespace XY_Deepening_Toolbox
         {
             try
             {
-                string asmDir = System.IO.Path.GetDirectoryName(typeof(Commands).Assembly.Location);
-                string p = System.IO.Path.Combine(asmDir, fileName);
-                if (System.IO.File.Exists(p)) return p;
+                string asmLoc = typeof(Commands).Assembly.Location;
+                if (!string.IsNullOrEmpty(asmLoc))
+                {
+                    string asmDir = System.IO.Path.GetDirectoryName(asmLoc);
+                    if (!string.IsNullOrEmpty(asmDir))
+                    {
+                        string p = System.IO.Path.Combine(asmDir, fileName);
+                        if (System.IO.File.Exists(p)) return p;
+                    }
+                }
+            }
+            catch { }
+            try
+            {
+                string codeBase = typeof(Commands).Assembly.CodeBase;
+                if (!string.IsNullOrEmpty(codeBase))
+                {
+                    Uri uri = new Uri(codeBase);
+                    if (uri.IsFile)
+                    {
+                        string asmDir = System.IO.Path.GetDirectoryName(uri.LocalPath);
+                        if (!string.IsNullOrEmpty(asmDir))
+                        {
+                            string p = System.IO.Path.Combine(asmDir, fileName);
+                            if (System.IO.File.Exists(p)) return p;
+                        }
+                    }
+                }
             }
             catch { }
             try
             {
                 string acadPath = Autodesk.AutoCAD.DatabaseServices.HostApplicationServices.Current.FindFile(fileName, null, Autodesk.AutoCAD.DatabaseServices.FindFileHint.Default);
                 if (!string.IsNullOrEmpty(acadPath) && System.IO.File.Exists(acadPath)) return acadPath;
+            }
+            catch { }
+            try
+            {
+                string cur = System.IO.Path.Combine(System.Environment.CurrentDirectory, fileName);
+                if (System.IO.File.Exists(cur)) return cur;
             }
             catch { }
             return fileName;
@@ -201,12 +416,22 @@ namespace XY_Deepening_Toolbox
 
         private static PaletteSet _paletteSet = null;
         private static ToolboxControl _control = null;
+        private static bool _paletteEventsHooked = false;
+
+        public static PaletteSet PaletteSetInstance
+        {
+            get { return _paletteSet; }
+        }
 
         public static void CleanupExistingPalettes()
         {
             try
             {
-                if (_paletteSet != null) _paletteSet.Visible = false;
+                if (_paletteSet != null)
+                {
+                    PaletteStateManager.SaveSettings(_paletteSet);
+                    _paletteSet.Visible = false;
+                }
             }
             catch { }
             try
@@ -247,7 +472,7 @@ namespace XY_Deepening_Toolbox
         }
 
         // 呼出/隐藏 工作台面板 (XGJ / XYGJ / XYSZ / ZYSZ / XYPANEL)
-        // 支持真正吸附侧边栏（左/右侧停靠、自动隐藏）并在异常环境下无缝降级为浮动窗体
+        // 首次打开自动固定吸附在 CAD 右侧，后续完全记忆用户使用习惯 (左侧/右侧吸附、折叠隐藏、悬浮等)
         [CommandMethod("XGJ")]
         [CommandMethod("XYGJ")]
         [CommandMethod("XYSZ")]
@@ -261,24 +486,69 @@ namespace XY_Deepening_Toolbox
 
                 if (_paletteSet == null)
                 {
-                    // 核心防崩：不使用导致注册表野指针的旧GUID，使用安全构造
-                    _paletteSet = new PaletteSet("XY工具箱 v" + UpdateService.CURRENT_VERSION);
+                    PaletteSettings settings = PaletteStateManager.LoadSettings();
+
+                    // 专有 GUID 保证与 AutoCAD Profile 工作空间的长期亲和
+                    Guid paletteGuid = new Guid("98A6F14B-4E77-4C3D-9A2E-8E56B1D4F024");
+                    _paletteSet = new PaletteSet("XY工具箱 v" + UpdateService.CURRENT_VERSION, paletteGuid);
                     _paletteSet.Style = PaletteSetStyles.ShowAutoHideButton | 
                                         PaletteSetStyles.ShowCloseButton |
-                                        PaletteSetStyles.ShowPropertiesMenu;
+                                        PaletteSetStyles.ShowPropertiesMenu |
+                                        PaletteSetStyles.Snappable;
                     _paletteSet.MinimumSize = new Size(240, 420);
-                    _paletteSet.Size = new Size(260, 600);
+                    _paletteSet.Size = new Size(settings.Width > 200 ? settings.Width : 260, 
+                                                settings.Height > 300 ? settings.Height : 650);
                     _paletteSet.DockEnabled = DockSides.Right | DockSides.Left;
-
-                    // 默认靠右侧吸附，绝不与天正建筑左侧栏冲突打架
-                    try
-                    {
-                        _paletteSet.Dock = DockSides.Right;
-                    }
-                    catch { }
 
                     _control = new ToolboxControl();
                     _paletteSet.Add("XY工具箱 v" + UpdateService.CURRENT_VERSION, _control);
+
+                    if (!_paletteEventsHooked)
+                    {
+                        _paletteEventsHooked = true;
+                        _paletteSet.StateChanged += (s, e) => PaletteStateManager.SaveSettings(_paletteSet);
+                        _paletteSet.SizeChanged += (s, e) => PaletteStateManager.SaveSettings(_paletteSet);
+                        _paletteSet.PaletteSetMoved += (s, e) => PaletteStateManager.SaveSettings(_paletteSet);
+                    }
+
+                    // 1. 先置为可见
+                    _paletteSet.Visible = true;
+
+                    // 2. 应用吸附停靠方位：首次默认固定吸附在右侧；之后跟随用户习惯 (左侧/右侧/浮动)
+                    try
+                    {
+                        if (settings.DockSide == DockSides.Right || settings.DockSide == DockSides.Left)
+                        {
+                            _paletteSet.Dock = settings.DockSide;
+                        }
+                        else
+                        {
+                            _paletteSet.Dock = DockSides.None;
+                            if (settings.FloatingX > 0 && settings.FloatingY > 0)
+                            {
+                                _paletteSet.Location = new Point(settings.FloatingX, settings.FloatingY);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // 3. 应用自动折叠隐藏 (AutoRollUp / 吸附折叠小边条)
+                    try
+                    {
+                        _paletteSet.AutoRollUp = settings.AutoRollUp;
+                        if (settings.AutoRollUp)
+                        {
+                            _paletteSet.RolledUp = true;
+                        }
+                    }
+                    catch { }
+
+                    // 首次保存初始状态 (保证生成标准 palette_state.ini)
+                    if (!settings.IsInitialized)
+                    {
+                        PaletteStateManager.SaveSettings(_paletteSet);
+                    }
+                    return;
                 }
 
                 _paletteSet.Text = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
@@ -290,6 +560,7 @@ namespace XY_Deepening_Toolbox
                 if (!_paletteSet.Visible)
                 {
                     _paletteSet.Visible = true;
+                    PaletteStateManager.SaveSettings(_paletteSet);
                 }
                 else
                 {
@@ -300,6 +571,7 @@ namespace XY_Deepening_Toolbox
                     else
                     {
                         _paletteSet.Visible = false;
+                        PaletteStateManager.SaveSettings(_paletteSet);
                     }
                 }
             }
@@ -623,20 +895,7 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("IME")]
         public static void ToggleImeCommand()
         {
-            ImeAutoSwitchManager.Enabled = !ImeAutoSwitchManager.Enabled;
-            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (doc != null)
-            {
-                if (ImeAutoSwitchManager.Enabled)
-                {
-                    doc.Editor.WriteMessage("\n★ [XY工具箱] 输入法智能自动切换已【开启】(绘图快捷键全自动英文，文本编辑全自动中文)\n");
-                    ImeAutoSwitchManager.SetImeEnglish();
-                }
-                else
-                {
-                    doc.Editor.WriteMessage("\n★ [XY工具箱] 输入法智能自动切换已【关闭】(恢复系统默认手动切换)\n");
-                }
-            }
+            ImeAutoSwitchManager.ToggleOrReport();
         }
 
         // ========================================================
@@ -4215,8 +4474,20 @@ namespace XY_Deepening_Toolbox
             btnMini.MouseEnter += (s, e) => { btnMini.ForeColor = Color.White; };
             btnMini.MouseLeave += (s, e) => { btnMini.ForeColor = Color.FromArgb(160, 170, 185); };
             btnMini.Click += (s, e) => {
-                ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
-                if (tf != null) tf.ToggleMiniMode();
+                if (Commands.PaletteSetInstance != null)
+                {
+                    Commands.PaletteSetInstance.AutoRollUp = !Commands.PaletteSetInstance.AutoRollUp;
+                    if (Commands.PaletteSetInstance.AutoRollUp)
+                    {
+                        Commands.PaletteSetInstance.RolledUp = true;
+                    }
+                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
+                }
+                else
+                {
+                    ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
+                    if (tf != null) tf.ToggleMiniMode();
+                }
             };
             pnlHeader.Controls.Add(btnMini);
 
@@ -4233,7 +4504,15 @@ namespace XY_Deepening_Toolbox
             btnClose.MouseEnter += (s, e) => { btnClose.ForeColor = Color.FromArgb(240, 80, 80); };
             btnClose.MouseLeave += (s, e) => { btnClose.ForeColor = Color.FromArgb(160, 170, 185); };
             btnClose.Click += (s, e) => {
-                if (this.ParentForm != null) this.ParentForm.Hide();
+                if (Commands.PaletteSetInstance != null)
+                {
+                    Commands.PaletteSetInstance.Visible = false;
+                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
+                }
+                else if (this.ParentForm != null)
+                {
+                    this.ParentForm.Hide();
+                }
             };
             pnlHeader.Controls.Add(btnClose);
 
@@ -4250,8 +4529,20 @@ namespace XY_Deepening_Toolbox
             picLogo.MouseDown += handleDrag;
 
             EventHandler handleDblClick = (s, e) => {
-                ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
-                if (tf != null) tf.ToggleMiniMode();
+                if (Commands.PaletteSetInstance != null)
+                {
+                    Commands.PaletteSetInstance.AutoRollUp = !Commands.PaletteSetInstance.AutoRollUp;
+                    if (Commands.PaletteSetInstance.AutoRollUp)
+                    {
+                        Commands.PaletteSetInstance.RolledUp = true;
+                    }
+                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
+                }
+                else
+                {
+                    ToolboxFloatingForm tf = this.ParentForm as ToolboxFloatingForm;
+                    if (tf != null) tf.ToggleMiniMode();
+                }
             };
             pnlHeader.DoubleClick += handleDblClick;
             lblTitle.DoubleClick += handleDblClick;
@@ -4772,33 +5063,29 @@ namespace XY_Deepening_Toolbox
 
     // ========================================================
     // 输入法智能自动切换管理器 (ImeAutoSwitchManager)
-    // 工业级双模立体输入法驱动：
-    // 1. 绘图与命令快捷键状态：100% 自动保持纯英文模式，按快捷键绝不误弹拼音选词框！
-    // 2. 文字与多行文本编辑：100% 自动切换中文模式，点开文字直接输入汉字！
-    // 3. 命令结束 / ESC取消：0.001秒无感恢复纯英文，随心盲打！
-    // 4. 全链路监听：
+    // 工业级高内聚完全隔离输入法驱动 (完美支持 搜狗拼音 / 微软拼音 / 微信输入法)：
+    // 1. 严格进程沙箱隔离：仅作用于 AutoCAD 进程内部窗口，绝不污染微信、QQ、浏览器、Word等外部软件！
+    // 2. 零键盘布局污染：绝不向 Windows 注册表与系统加载 US 0409 键盘，系统输入法列表始终干净纯正；
+    // 3. 绘图与命令快捷键状态：AutoCAD 视口自动置为纯英文半角盲打，彻底杜绝误弹拼音候选框；
+    // 4. 文字与多行文本编辑：AutoCAD 自动开启中文输入法模式，直接拼音输入汉字；
+    // 5. 命令结束 / ESC取消 / 视口失焦切回：瞬间无感恢复纯英文盲打；切出到其他软件时静默不干涉；
+    // 6. 全链路事件静默监听：
     //    - Document.CommandWillStart / CommandEnded / CommandCancelled / CommandFailed
     //    - Document.LispWillStart / LispEnded / LispCancelled
-    //    - Editor.PromptingForString / PromptedForString
+    //    - Editor.PromptingForString (智能提示词语义分析，区分文字输入与选项选择) / PromptedForString
     //    - Editor.EnteringQuiescentState
-    //    - Application.PreTranslateMessage (实时拦截 A-Z / ESC 按键，根据当前上下文智能纠偏)
-    //    - 实时读取 CMDNAMES 环境变量，双重锁定当前文字编辑状态
-    // 5. 语言布局 + IMM32 + WM_IME_CONTROL 深度立体驱动：
-    //    - 针对原生 C++ 窗口和子控件发送 WM_INPUTLANGCHANGEREQUEST
-    //    - 通过 ImmGetDefaultIMEWnd 发送 IMC_SETOPENSTATUS / IMC_SETCONVERSIONMODE
-    //    - 针对微软拼音穿透模拟 Shift 键，三重绝对保障！
+    //    - Application.PreTranslateMessage (仅按键 A-Z/0-9/ESC 与激活拦截，零鼠标开销)
+    //    - 实时读取 CMDNAMES 环境变量，权威判定真实文字编辑上下文
     // ========================================================
     public static class ImeAutoSwitchManager
     {
         private static bool _enabled = true;
         private static bool _initialized = false;
         private static bool _isInTextCommand = false;
-
-        private static InputLanguage _enLanguage = null;
-        private static InputLanguage _zhLanguage = null;
+        private static uint _cadPid = 0;
 
         [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetFocus();
@@ -4807,19 +5094,13 @@ namespace XY_Deepening_Toolbox
         private static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetKeyboardLayout(uint idThread);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr ActivateKeyboardLayout(IntPtr hkl, uint flags);
-
-        [DllImport("user32.dll")]
-        private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern int GetKeyboardLayoutList(int nBuff, [Out] IntPtr[] lpList);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnloadKeyboardLayout(IntPtr hkl);
 
         [DllImport("imm32.dll")]
         private static extern IntPtr ImmGetContext(IntPtr hWnd);
@@ -4845,32 +5126,103 @@ namespace XY_Deepening_Toolbox
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 
-        private const byte VK_SHIFT = 0x10;
         private const byte VK_ESCAPE = 0x1B;
-        private const uint KEYEVENTF_KEYUP = 0x0002;
-        private const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
-        private const uint KLF_ACTIVATE = 0x00000001;
-        private const uint KLF_SETFORPROCESS = 0x00000100;
         private const uint WM_IME_CONTROL = 0x0283;
         private const int IMC_GETOPENSTATUS = 0x0005;
         private const int IMC_SETOPENSTATUS = 0x0006;
         private const int IMC_GETCONVERSIONMODE = 0x0001;
         private const int IMC_SETCONVERSIONMODE = 0x0002;
+        private const int IME_CMODE_ALPHANUMERIC = 0x0000;
         private const int IME_CMODE_NATIVE = 0x0001;
 
-        // 全面覆盖所有原生文字、标注、天正建筑与海龙文字命令
+        // 全面覆盖所有原生文字、标注、多引线、表格、天正建筑与海龙文字命令
         private static readonly HashSet<string> TextCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "TEXTEDIT", "TEXT", "DTEXT", "-TEXT", "MTEXT", "-MTEXT", "MTEDIT", "DDEDIT", "ED", "T", "MT", "DT",
             "ATTEDIT", "EATTEDIT", "-ATTEDIT", "ATTDEF", "-ATTDEF", "DDATTE", "BATTMAN", "FIND", "GATTE",
             "QLEADER", "LEADER", "MLEADER", "MLEADEREDIT", "DIMEDIT", "DIMTEDIT", "TEDIT", "TABLEDIT", "TABLE",
-            "STYLE", "SPELL", "CHANGETEXT", "SCALETEXT", "JUSTIFYTEXT", "TXT2MTXT", "ARCTEXT", "RTEXT",
+            "STYLE", "SPELL", "CHANGETEXT", "SCALETEXT", "JUSTIFYTEXT", "TXT2MTXT", "ARCTEXT", "RTEXT", "TCOUNT",
             // 天正建筑系列常用文字命令
             "TCH_TEXT", "TCH_MTEXT", "TCH_TEXTEDIT", "TCH_EDITTEXT", "TCH_DIM", "TCH_DIMEDIT", "TCH_WZ", "WZ", "DZ",
             "TCH_DRAWINGNAME", "TCH_INDEX", "TCH_DOOR_NUM", "TCH_WINDOW_NUM", "TCH_ELEV_SYM",
             "TCH_TABLE", "TCH_TABLEEDIT", "BG", "BGBJ", "TCH_BG", "TCH_BGBJ", "TCH_TITLE", "TCH_FIND",
             "TCH_LEADER", "TCH_YINCHU", "TCH_SECTION", "TCH_ROOM_NAME", "FJMC", "TCH_FJMC"
         };
+
+        private static bool IsAutoCadWindow(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero) return false;
+            if (_cadPid == 0)
+            {
+                try
+                {
+                    _cadPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                }
+                catch { }
+            }
+            uint pid = 0;
+            GetWindowThreadProcessId(hWnd, out pid);
+            return pid == _cadPid;
+        }
+
+        private static List<IntPtr> GetCadTargetWindows()
+        {
+            List<IntPtr> list = new List<IntPtr>();
+            HashSet<IntPtr> seen = new HashSet<IntPtr>();
+
+            Action<IntPtr> addWnd = (w) =>
+            {
+                if (w != IntPtr.Zero && !seen.Contains(w) && IsAutoCadWindow(w))
+                {
+                    seen.Add(w);
+                    list.Add(w);
+                }
+            };
+
+            addWnd(GetFocus());
+
+            try
+            {
+                Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+                if (doc != null && doc.Window != null)
+                {
+                    addWnd(doc.Window.Handle);
+                }
+                IntPtr mainWnd = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
+                addWnd(mainWnd);
+            }
+            catch { }
+
+            IntPtr fg = GetForegroundWindow();
+            if (IsAutoCadWindow(fg))
+            {
+                addWnd(fg);
+            }
+
+            return list;
+        }
+
+        private static void CleanGlobal0409Layout()
+        {
+            try
+            {
+                int count = GetKeyboardLayoutList(0, null);
+                if (count > 0)
+                {
+                    IntPtr[] layouts = new IntPtr[count];
+                    GetKeyboardLayoutList(count, layouts);
+                    foreach (IntPtr l in layouts)
+                    {
+                        long val = l.ToInt64() & 0xFFFF;
+                        if (val == 0x0409)
+                        {
+                            UnloadKeyboardLayout(l);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
 
         public static string CleanCommandName(string cmd)
         {
@@ -4961,33 +5313,41 @@ namespace XY_Deepening_Toolbox
                 if (IsInTextCommandContext()) return true;
 
                 IntPtr focusWnd = GetFocus();
-                if (focusWnd != IntPtr.Zero)
+                if (focusWnd != IntPtr.Zero && IsAutoCadWindow(focusWnd))
                 {
                     System.Text.StringBuilder sb = new System.Text.StringBuilder(256);
                     GetClassName(focusWnd, sb, 256);
                     string cls = sb.ToString();
 
                     if (cls.IndexOf("InPlaceTextEditor", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        cls.IndexOf("RICHEDIT", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        cls.IndexOf("Edit", StringComparison.OrdinalIgnoreCase) >= 0)
+                        cls.IndexOf("InPlaceEditor", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        IntPtr parent = GetParent(focusWnd);
-                        if (parent != IntPtr.Zero)
-                        {
-                            System.Text.StringBuilder pb = new System.Text.StringBuilder(256);
-                            GetClassName(parent, pb, 256);
-                            string pcls = pb.ToString();
-                            if (pcls.IndexOf("CommandLine", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                pcls.IndexOf("CmdLine", StringComparison.OrdinalIgnoreCase) >= 0)
-                            {
-                                return false; // 排除命令行输入
-                            }
-                        }
                         return true;
                     }
                 }
             }
             catch { }
+            return false;
+        }
+
+        public static bool IsTextPrompt(string p)
+        {
+            if (string.IsNullOrEmpty(p)) return false;
+            string upper = p.ToUpperInvariant();
+            if (p.Contains("文字") || p.Contains("文本") || p.Contains("输入") || p.Contains("内容") ||
+                p.Contains("说明") || p.Contains("名称") || p.Contains("标题") || p.Contains("标高") ||
+                p.Contains("注释") || p.Contains("标注内容") || p.Contains("填写") ||
+                upper.Contains("TEXT") || upper.Contains("STRING") || upper.Contains("NAME") ||
+                upper.Contains("DESC") || upper.Contains("NOTE") || upper.Contains("TITLE"))
+            {
+                // 排除选项提示词，如 "[是(Y)/否(N)]" 或 "[设置(S)/全部(A)]"
+                if ((p.Contains("[") || p.Contains("<")) &&
+                    (upper.Contains("/S") || upper.Contains("/A") || upper.Contains("/Y") || upper.Contains("/N") || upper.Contains("/O")))
+                {
+                    return false;
+                }
+                return true;
+            }
             return false;
         }
 
@@ -5004,7 +5364,10 @@ namespace XY_Deepening_Toolbox
 
             try
             {
-                DetectInputLanguages();
+                _cadPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+
+                // 启动时静默清理历史遗留的 0409 键盘布局，保证系统干净
+                CleanGlobal0409Layout();
 
                 DocumentCollection dm = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager;
                 dm.DocumentActivated += (s, e) => { if (e.Document != null) AttachDocument(e.Document); };
@@ -5015,34 +5378,11 @@ namespace XY_Deepening_Toolbox
                     AttachDocument(dm.MdiActiveDocument);
                 }
 
-                // 挂接按键拦截预处理：当处于非文字状态且敲命令按键时智能纠偏为英文
+                // 挂接按键与激活拦截预处理
                 Autodesk.AutoCAD.ApplicationServices.Application.PreTranslateMessage += OnPreTranslateMessage;
 
                 // 启动默认置为纯英文盲打状态
                 SetImeEnglish();
-            }
-            catch { }
-        }
-
-        private static void DetectInputLanguages()
-        {
-            try
-            {
-                foreach (InputLanguage lang in InputLanguage.InstalledInputLanguages)
-                {
-                    string culture = lang.Culture.Name.ToLower();
-                    string layout = lang.LayoutName.ToLower();
-
-                    if (_enLanguage == null && (culture.Contains("en") || layout.Contains("美式键盘") || layout.Contains("united states") || layout.Contains("us")))
-                    {
-                        _enLanguage = lang;
-                    }
-
-                    if (_zhLanguage == null && (culture.Contains("zh") || layout.Contains("中文") || layout.Contains("chinese") || layout.Contains("拼音") || layout.Contains("pinyin")))
-                    {
-                        _zhLanguage = lang;
-                    }
-                }
             }
             catch { }
         }
@@ -5077,6 +5417,13 @@ namespace XY_Deepening_Toolbox
                     doc.Editor.PromptedForString += OnPromptedForString;
                     doc.Editor.EnteringQuiescentState += OnEnteringQuiescentState;
                 }
+
+                // 切换文档时自动置为英文
+                if (_enabled && !IsInRealTextEditing())
+                {
+                    _isInTextCommand = false;
+                    SetImeEnglish();
+                }
             }
             catch { }
         }
@@ -5084,14 +5431,18 @@ namespace XY_Deepening_Toolbox
         private static void OnPromptingForString(object sender, PromptStringOptionsEventArgs e)
         {
             if (!_enabled) return;
-            _isInTextCommand = true;
-            SetImeChinese();
+            string p = (e != null && e.Options != null) ? (e.Options.Message ?? "") : "";
+            if (IsTextPrompt(p) || IsInTextCommandContext())
+            {
+                _isInTextCommand = true;
+                SetImeChinese();
+            }
         }
 
         private static void OnPromptedForString(object sender, PromptStringResultEventArgs e)
         {
             if (!_enabled) return;
-            if (!IsInTextCommandContext())
+            if (!IsInTextCommandContext() && !IsInRealTextEditing())
             {
                 _isInTextCommand = false;
                 SetImeEnglish();
@@ -5101,7 +5452,6 @@ namespace XY_Deepening_Toolbox
         private static void OnEnteringQuiescentState(object sender, EventArgs e)
         {
             if (!_enabled) return;
-            // 处于命令行静默等待态且无文字命令，确保处于英文模式
             if (!IsInRealTextEditing())
             {
                 _isInTextCommand = false;
@@ -5186,37 +5536,60 @@ namespace XY_Deepening_Toolbox
             if (!_enabled) return;
             try
             {
-                // ESC 键按下：瞬间清除文字模式并恢复纯英文
-                if (e.Message.message == 0x0100 && e.Message.wParam.ToInt32() == VK_ESCAPE)
+                uint msg = (uint)e.Message.message;
+
+                // 1. ESC 键按下 (WM_KEYDOWN 0x0100): 强制撤销文字模式并恢复纯英文盲打
+                if (msg == 0x0100 && e.Message.wParam.ToInt32() == VK_ESCAPE)
                 {
                     _isInTextCommand = false;
                     SetImeEnglish();
                     return;
                 }
 
-                // 检查是否处于真实文字编辑状态 (多行文字、双击改字、天正文字框等)
-                bool inText = _isInTextCommand || IsInRealTextEditing();
-                if (inText)
+                // 2. 窗口激活 (WM_ACTIVATE 0x0006):
+                if (msg == 0x0006)
                 {
-                    _isInTextCommand = true;
-                    // 文字编辑中：确保进入中文输入状态，绝不压制，随心输入汉字
-                    if (!IsImeInChineseMode())
+                    int wParamVal = e.Message.wParam.ToInt32() & 0xFFFF;
+                    // WA_INACTIVE (0): CAD 正在失去焦点 (用户切到微信/浏览器/QQ/Word等) -> 坚决不执行任何操作，严禁干扰外部软件！
+                    if (wParamVal == 0)
                     {
-                        SetImeChinese();
+                        return;
+                    }
+
+                    // WA_ACTIVE (1) or WA_CLICKACTIVE (2): CAD 重新获取焦点
+                    if (!_isInTextCommand && !IsInTextCommandContext() && !IsInRealTextEditing())
+                    {
+                        SetImeEnglish();
                     }
                     return;
                 }
 
-                // 非文字编辑状态（命令与绘图态）：
-                // 当按下 A-Z 准备执行 CAD 快捷键时，确保处于英文半角模式，杜绝误转中文拼音！
-                if (e.Message.message == 0x0100)
+                // 3. 正在文字编辑模式中：完全放行，绝不干扰用户输入拼音或中英混输
+                if (_isInTextCommand || IsInTextCommandContext())
+                {
+                    return;
+                }
+
+                // 4. 非文字状态下，按字母键 (A-Z, 0x41-0x5A) 或数字键 (0-9, 0x30-0x39) 准备输入CAD快捷键时：
+                // 仅对 CAD 自身焦点窗口检测输入法是否开启，若开启则静默关闭，杜绝误弹拼音候选框
+                if (msg == 0x0100)
                 {
                     int vk = e.Message.wParam.ToInt32();
-                    if (vk >= 0x41 && vk <= 0x5A)
+                    if ((vk >= 0x41 && vk <= 0x5A) || (vk >= 0x30 && vk <= 0x39))
                     {
-                        if (IsImeInChineseMode())
+                        IntPtr focusWnd = GetFocus();
+                        if (IsAutoCadWindow(focusWnd))
                         {
-                            SetImeEnglish();
+                            IntPtr hIMC = ImmGetContext(focusWnd);
+                            if (hIMC != IntPtr.Zero)
+                            {
+                                bool open = ImmGetOpenStatus(hIMC);
+                                ImmReleaseContext(focusWnd, hIMC);
+                                if (open)
+                                {
+                                    SetImeEnglish();
+                                }
+                            }
                         }
                     }
                 }
@@ -5224,81 +5597,29 @@ namespace XY_Deepening_Toolbox
             catch { }
         }
 
-        public static bool IsImeInChineseMode(IntPtr hWnd = default(IntPtr))
-        {
-            try
-            {
-                if (hWnd == IntPtr.Zero)
-                {
-                    hWnd = GetFocus();
-                    if (hWnd == IntPtr.Zero) hWnd = GetForegroundWindow();
-                    if (hWnd == IntPtr.Zero) hWnd = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
-                }
-                if (hWnd == IntPtr.Zero) return false;
-
-                // 检查当前键盘布局
-                IntPtr hkl = GetKeyboardLayout(0);
-                long hklVal = hkl.ToInt64() & 0xFFFFFFFF;
-                if (hklVal == 0x04090409) return false;
-
-                // 检查 IME 默认窗口状态
-                IntPtr imeWnd = ImmGetDefaultIMEWnd(hWnd);
-                if (imeWnd != IntPtr.Zero)
-                {
-                    int status = (int)SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_GETOPENSTATUS, IntPtr.Zero);
-                    int mode = (int)SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_GETCONVERSIONMODE, IntPtr.Zero);
-                    if (status != 0 && (mode & IME_CMODE_NATIVE) != 0)
-                    {
-                        return true;
-                    }
-                }
-
-                // 检查传统 IMM 上下文
-                IntPtr hIMC = ImmGetContext(hWnd);
-                if (hIMC != IntPtr.Zero)
-                {
-                    int conv, sent;
-                    bool open = ImmGetOpenStatus(hIMC);
-                    bool got = ImmGetConversionStatus(hIMC, out conv, out sent);
-                    ImmReleaseContext(hWnd, hIMC);
-                    if (got && open && (conv & IME_CMODE_NATIVE) != 0)
-                    {
-                        return true;
-                    }
-                }
-            }
-            catch { }
-            return false;
-        }
-
         public static void SetImeEnglish()
         {
+            if (!_enabled) return;
             try
             {
-                IntPtr focusWnd = GetFocus();
-                IntPtr fgWnd = GetForegroundWindow();
-                IntPtr acadWnd = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
-
-                IntPtr[] wnds = new IntPtr[] { focusWnd, fgWnd, acadWnd };
-                foreach (IntPtr w in wnds)
+                List<IntPtr> targets = GetCadTargetWindows();
+                foreach (IntPtr w in targets)
                 {
-                    if (w == IntPtr.Zero) continue;
+                    // 1. 关闭 IMM 上下文输入状态
+                    IntPtr hIMC = ImmGetContext(w);
+                    if (hIMC != IntPtr.Zero)
+                    {
+                        ImmSetConversionStatus(hIMC, IME_CMODE_ALPHANUMERIC, 0);
+                        ImmSetOpenStatus(hIMC, false);
+                        ImmReleaseContext(w, hIMC);
+                    }
 
-                    // 1. 发送 WM_IME_CONTROL 置为英文半角模式
+                    // 2. 发送 WM_IME_CONTROL 到默认 IME 窗口
                     IntPtr imeWnd = ImmGetDefaultIMEWnd(w);
                     if (imeWnd != IntPtr.Zero)
                     {
                         SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_SETOPENSTATUS, IntPtr.Zero);
                         SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_SETCONVERSIONMODE, IntPtr.Zero);
-                    }
-
-                    // 2. 传统 IMM32 上下文关闭中文转换 (搜狗/微软拼音等)
-                    IntPtr hIMC = ImmGetContext(w);
-                    if (hIMC != IntPtr.Zero)
-                    {
-                        ImmSetConversionStatus(hIMC, 0, 0); // 0 = 纯英文半角模式
-                        ImmSetOpenStatus(hIMC, false);       // 关闭中文输入状态
-                        ImmReleaseContext(w, hIMC);
                     }
                 }
             }
@@ -5307,57 +5628,28 @@ namespace XY_Deepening_Toolbox
 
         public static void SetImeChinese()
         {
+            if (!_enabled) return;
             try
             {
-                // 1. 如果当前处于纯英文美式键盘 (en-US)，优先切回中文输入法
-                IntPtr hkl = GetKeyboardLayout(0);
-                long hklVal = hkl.ToInt64() & 0xFFFFFFFF;
-                if (hklVal == 0x04090409 && _zhLanguage != null)
+                List<IntPtr> targets = GetCadTargetWindows();
+                foreach (IntPtr w in targets)
                 {
-                    ActivateKeyboardLayout(_zhLanguage.Handle, KLF_ACTIVATE | KLF_SETFORPROCESS);
-                    try { InputLanguage.CurrentInputLanguage = _zhLanguage; } catch { }
-                }
-
-                IntPtr focusWnd = GetFocus();
-                IntPtr fgWnd = GetForegroundWindow();
-                IntPtr acadWnd = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle;
-
-                IntPtr[] wnds = new IntPtr[] { focusWnd, fgWnd, acadWnd };
-                foreach (IntPtr w in wnds)
-                {
-                    if (w == IntPtr.Zero) continue;
-
-                    if (_zhLanguage != null)
+                    // 1. 开启 IMM 上下文输入状态
+                    IntPtr hIMC = ImmGetContext(w);
+                    if (hIMC != IntPtr.Zero)
                     {
-                        PostMessage(w, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, _zhLanguage.Handle);
+                        ImmSetOpenStatus(hIMC, true);
+                        ImmSetConversionStatus(hIMC, IME_CMODE_NATIVE, 0);
+                        ImmReleaseContext(w, hIMC);
                     }
 
+                    // 2. 发送 WM_IME_CONTROL 到默认 IME 窗口
                     IntPtr imeWnd = ImmGetDefaultIMEWnd(w);
                     if (imeWnd != IntPtr.Zero)
                     {
                         SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_SETOPENSTATUS, (IntPtr)1);
                         SendMessage(imeWnd, WM_IME_CONTROL, (IntPtr)IMC_SETCONVERSIONMODE, (IntPtr)IME_CMODE_NATIVE);
                     }
-
-                    IntPtr hIMC = ImmGetContext(w);
-                    if (hIMC != IntPtr.Zero)
-                    {
-                        int conv, sent;
-                        if (ImmGetConversionStatus(hIMC, out conv, out sent))
-                        {
-                            conv |= IME_CMODE_NATIVE;
-                            ImmSetConversionStatus(hIMC, conv, sent);
-                        }
-                        ImmSetOpenStatus(hIMC, true);
-                        ImmReleaseContext(w, hIMC);
-                    }
-                }
-
-                // 2. 针对微软拼音：如果依然处于英文状态，模拟极速 Shift 切换为中文
-                if (!IsImeInChineseMode())
-                {
-                    keybd_event(VK_SHIFT, 0, 0, 0);
-                    keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
                 }
             }
             catch { }
@@ -5366,24 +5658,27 @@ namespace XY_Deepening_Toolbox
         public static void ToggleOrReport()
         {
             Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            Editor ed = doc.Editor;
+            Editor ed = doc != null ? doc.Editor : null;
 
             _enabled = !_enabled;
             if (_enabled)
             {
+                CleanGlobal0409Layout();
                 SetImeEnglish();
-                ed.WriteMessage("\n[XY工具箱] 输入法智能自动切换: ★ 已开启 (画图/命令保持纯英文，文字编辑自动切中文)");
+                if (ed != null)
+                {
+                    ed.WriteMessage("\n★ [XY工具箱] 输入法智能自动切换已【开启】(仅作用于AutoCAD，绘图盲打英文，文字自动中文)");
+                    ed.WriteMessage("\n   [完全隔离] 零全局污染，微信/浏览器/Word等外部软件输入法状态完全独立不受干扰");
+                    ed.WriteMessage("\n   [兼容保证] 完美适配搜狗拼音、微软拼音、微信输入法、百度输入法\n");
+                }
             }
             else
             {
-                ed.WriteMessage("\n[XY工具箱] 输入法智能自动切换: ○ 已关闭");
+                if (ed != null)
+                {
+                    ed.WriteMessage("\n★ [XY工具箱] 输入法智能自动切换已【关闭】(恢复CAD原生手动切换)\n");
+                }
             }
-
-            string enName = _enLanguage != null ? _enLanguage.LayoutName : "未检测到独立美式键盘";
-            string zhName = _zhLanguage != null ? _zhLanguage.LayoutName : "未检测到中文输入法";
-            ed.WriteMessage(string.Format("\n  [诊断] 当前英文布局: {0} | 中文布局: {1} | 当前活动键盘: {2}\n",
-                enName, zhName, InputLanguage.CurrentInputLanguage.LayoutName));
         }
     }
 }

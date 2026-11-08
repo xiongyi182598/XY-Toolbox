@@ -1,8 +1,21 @@
 $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-$acadDir = 'C:\Program Files\Autodesk\AutoCAD 2024'
-
-Stop-Process -Name acad -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 2
+$candidateDirs = @(
+    'D:\AUTO-CAD2024\AutoCAD 2024',
+    'C:\Program Files\Autodesk\AutoCAD 2024',
+    'D:\Program Files\Autodesk\AutoCAD 2024'
+)
+$acadDir = $null
+foreach ($dir in $candidateDirs) {
+    if (Test-Path "$dir\accoremgd.dll") {
+        $acadDir = $dir
+        break
+    }
+}
+if (-not $acadDir) {
+    Write-Host "AutoCAD dependency directory not found!" -ForegroundColor Red
+    exit 1
+}
+Write-Host "Using AutoCAD directory: $acadDir"
 
 $refs = @(
     "/reference:$acadDir\accoremgd.dll",
@@ -35,11 +48,14 @@ $sources = @(
 
 $argsList = @("/target:library", "/platform:x64", "/out:XY_Toolbox.dll") + $refs + $sources
 
-Write-Host "开始执行编译 XY_Toolbox.dll..."
+Write-Host "Compiling XY_Toolbox.dll..."
 & $csc $argsList
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host ">>> 编译成功！输出文件: XY_Toolbox.dll" -ForegroundColor Green
+    Write-Host "Build success! Output: XY_Toolbox.dll" -ForegroundColor Green
+    Copy-Item -Path "XY_Toolbox.dll" -Destination "XY_Toolbox_104.dll" -Force -ErrorAction SilentlyContinue
+    Copy-Item -Path "XY_Toolbox.dll" -Destination "XY_Toolbox_105.dll" -Force -ErrorAction SilentlyContinue
+    Write-Host "Synced: XY_Toolbox_105.dll and XY_Toolbox_104.dll" -ForegroundColor Green
 } else {
-    Write-Host ">>> 编译失败，退出码: $LASTEXITCODE" -ForegroundColor Red
+    Write-Host "Build failed with exit code: $LASTEXITCODE" -ForegroundColor Red
 }

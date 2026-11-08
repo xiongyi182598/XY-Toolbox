@@ -25,4 +25,7 @@ apply_update.bat
 
 # 本地记忆与规则缓存
 last_flip_rules.json
+palette_state.ini
 *.xyrule
+
+__pycache__/
