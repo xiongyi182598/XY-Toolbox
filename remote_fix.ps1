@@ -44,7 +44,11 @@ if (-not $targetDir) {
         "E:\XY-Toolbox",
         "C:\XY-Toolbox",
         "F:\XY-Toolbox",
+        "D:\XY工具箱_纯净独立绿色版",
+        "E:\XY工具箱_纯净独立绿色版",
+        "C:\XY工具箱_纯净独立绿色版",
         "$([Environment]::GetFolderPath('Desktop'))\XY-Toolbox",
+        "$([Environment]::GetFolderPath('Desktop'))\XY工具箱_纯净独立绿色版",
         "$([Environment]::GetFolderPath('MyDocuments'))\XY-Toolbox"
     )
     foreach ($d in $commonDirs) {
