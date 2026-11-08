@@ -148,7 +148,7 @@ namespace XY_Deepening_Toolbox
             Visible = true;              // 默认显示
             FloatingX = -1;
             FloatingY = -1;
-            Width = 260;
+            Width = 150;                // 经典紧凑宽度 150px (对齐海龙/天正，杜绝右侧空白过宽)
             Height = 650;
         }
     }
@@ -254,6 +254,12 @@ namespace XY_Deepening_Toolbox
                             int h; if (int.TryParse(val, out h)) settings.Height = h;
                         }
                     }
+                }
+
+                // 优化旧版过宽的默认值：旧版默认 260px 右侧留白过多，新版统一对齐海龙/天正精简紧凑宽度 150px
+                if (settings.Width >= 230 && settings.Width <= 280)
+                {
+                    settings.Width = 150;
                 }
 
                 // 自愈保护：如果被误保存为 None 但并没有有效的浮动屏幕坐标，自动修正为默认右侧吸附
@@ -548,7 +554,7 @@ namespace XY_Deepening_Toolbox
                 EnsureLspLoaded();
 
                 PaletteSettings settings = PaletteStateManager.LoadSettings();
-                int targetW = (settings.Width >= 200 && settings.Width <= 800) ? settings.Width : 260;
+                int targetW = (settings.Width >= 120 && settings.Width <= 800) ? settings.Width : 150;
                 int targetH = (settings.Height >= 300 && settings.Height <= 2000) ? settings.Height : 650;
 
                 if (_paletteSet == null)
@@ -561,7 +567,7 @@ namespace XY_Deepening_Toolbox
                                         PaletteSetStyles.ShowCloseButton |
                                         PaletteSetStyles.ShowPropertiesMenu |
                                         PaletteSetStyles.Snappable;
-                    _paletteSet.MinimumSize = new Size(240, 420);
+                    _paletteSet.MinimumSize = new Size(120, 300);
                     _paletteSet.DockEnabled = DockSides.Right | DockSides.Left;
 
                     _control = new ToolboxControl();
@@ -635,7 +641,7 @@ namespace XY_Deepening_Toolbox
                 {
                     _paletteSet.Visible = true;
                     _paletteSet.RolledUp = false;
-                    if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 200)
+                    if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 120)
                     {
                         try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
                     }
@@ -645,7 +651,7 @@ namespace XY_Deepening_Toolbox
                 {
                     _paletteSet.RolledUp = false;
                 }
-                else if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 200)
+                else if (_paletteSet.Size.Height < 300 || _paletteSet.Size.Width < 120)
                 {
                     // 尺寸被挤压折叠异常：自愈恢复尺寸并确保停靠，绝不隐藏
                     try { _paletteSet.Size = new Size(targetW, targetH); } catch { }
@@ -4526,32 +4532,47 @@ namespace XY_Deepening_Toolbox
             pnlHeader.Controls.Add(picLogo);
 
             Label lblTitle = new Label();
-            lblTitle.Text = "XY工具箱 v" + UpdateService.CURRENT_VERSION;
+            lblTitle.Text = "XY工具箱";
             lblTitle.Font = new Font("SimSun", 9F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(32, 7);
+            lblTitle.Location = new Point(28, 7);
             lblTitle.AutoSize = true;
             lblTitle.UseCompatibleTextRendering = true;
+            toolTipHelp.SetToolTip(lblTitle, "XY工具箱 v" + UpdateService.CURRENT_VERSION + "\n输入 XGX 检查更新，输入 XKJ 设置快捷键");
+            toolTipHelp.SetToolTip(picLogo, "XY工具箱 v" + UpdateService.CURRENT_VERSION);
             pnlHeader.Controls.Add(lblTitle);
 
-            Label lblUpdate = new Label();
-            lblUpdate.Text = "检查更新";
-            lblUpdate.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
-            lblUpdate.ForeColor = Color.FromArgb(100, 180, 240);
-            lblUpdate.AutoSize = true;
-            lblUpdate.Location = new Point(lblTitle.Right + 8, 7);
-            lblUpdate.Cursor = Cursors.Hand;
-            lblUpdate.UseCompatibleTextRendering = true;
-            toolTipHelp.SetToolTip(lblUpdate, "点击在线检测新版本 (快捷键: XGX)");
-            lblUpdate.Click += (s, e) => XY_Toolbox.UpdateService.CheckForUpdates(false);
-            pnlHeader.Controls.Add(lblUpdate);
+            Label btnClose = new Label();
+            btnClose.Text = "✕";
+            btnClose.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
+            btnClose.ForeColor = Color.FromArgb(160, 170, 185);
+            btnClose.Location = new Point(126, 5);
+            btnClose.Size = new Size(20, 20);
+            btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnClose.TextAlign = ContentAlignment.MiddleCenter;
+            btnClose.Cursor = Cursors.Hand;
+            toolTipHelp.SetToolTip(btnClose, "关闭工作台 (快捷键 XGJ 随时重新呼出)");
+            btnClose.MouseEnter += (s, e) => { btnClose.ForeColor = Color.FromArgb(240, 80, 80); };
+            btnClose.MouseLeave += (s, e) => { btnClose.ForeColor = Color.FromArgb(160, 170, 185); };
+            btnClose.Click += (s, e) => {
+                if (Commands.PaletteSetInstance != null)
+                {
+                    Commands.PaletteSetInstance.Visible = false;
+                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
+                }
+                else if (this.ParentForm != null)
+                {
+                    this.ParentForm.Hide();
+                }
+            };
+            pnlHeader.Controls.Add(btnClose);
 
             Label btnMini = new Label();
             btnMini.Text = "─";
             btnMini.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
             btnMini.ForeColor = Color.FromArgb(160, 170, 185);
-            btnMini.Location = new Point(205, 5);
-            btnMini.Size = new Size(22, 20);
+            btnMini.Location = new Point(104, 5);
+            btnMini.Size = new Size(20, 20);
             btnMini.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnMini.TextAlign = ContentAlignment.MiddleCenter;
             btnMini.Cursor = Cursors.Hand;
@@ -4575,31 +4596,6 @@ namespace XY_Deepening_Toolbox
                 }
             };
             pnlHeader.Controls.Add(btnMini);
-
-            Label btnClose = new Label();
-            btnClose.Text = "✕";
-            btnClose.Font = new Font("SimSun", 8.5F, FontStyle.Regular);
-            btnClose.ForeColor = Color.FromArgb(160, 170, 185);
-            btnClose.Location = new Point(230, 5);
-            btnClose.Size = new Size(22, 20);
-            btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnClose.TextAlign = ContentAlignment.MiddleCenter;
-            btnClose.Cursor = Cursors.Hand;
-            toolTipHelp.SetToolTip(btnClose, "关闭工作台 (快捷键 XGJ 随时重新呼出)");
-            btnClose.MouseEnter += (s, e) => { btnClose.ForeColor = Color.FromArgb(240, 80, 80); };
-            btnClose.MouseLeave += (s, e) => { btnClose.ForeColor = Color.FromArgb(160, 170, 185); };
-            btnClose.Click += (s, e) => {
-                if (Commands.PaletteSetInstance != null)
-                {
-                    Commands.PaletteSetInstance.Visible = false;
-                    PaletteStateManager.SaveSettings(Commands.PaletteSetInstance);
-                }
-                else if (this.ParentForm != null)
-                {
-                    this.ParentForm.Hide();
-                }
-            };
-            pnlHeader.Controls.Add(btnClose);
 
             // 绑定鼠标左键按住拖动窗口与双击折叠
             MouseEventHandler handleDrag = (s, e) => {
@@ -4817,7 +4813,7 @@ namespace XY_Deepening_Toolbox
 
             Panel row = new Panel();
             row.Location = new Point(0, rowY);
-            row.Size = new Size(254, rowH);
+            row.Size = new Size(146, rowH);
             row.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             row.BackColor = Color.FromArgb(22, 25, 31);
             row.Cursor = Cursors.Hand;
@@ -4839,9 +4835,10 @@ namespace XY_Deepening_Toolbox
             lblText.Text = string.Format("{0}<{1}>", title, hotkey.ToLower());
             lblText.Font = new Font("SimSun", 9F, FontStyle.Regular);
             lblText.ForeColor = Color.FromArgb(245, 245, 245);
-            lblText.Location = new Point(24, 4);
-            lblText.Size = new Size(row.Width - 26, 16);
+            lblText.Location = new Point(22, 4);
+            lblText.Size = new Size(row.Width - 24, 16);
             lblText.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            lblText.AutoEllipsis = true;
             lblText.UseCompatibleTextRendering = true;
             row.Controls.Add(lblText);
 
@@ -4957,9 +4954,9 @@ namespace XY_Deepening_Toolbox
             this.ShowInTaskbar = false;
             this.StartPosition = FormStartPosition.Manual;
             this.BackColor = Color.FromArgb(18, 20, 25);
-            this.Width = 260;
+            this.Width = 150;
             this.Height = _expandedHeight;
-            this.MinimumSize = new Size(240, MINI_HEIGHT);
+            this.MinimumSize = new Size(120, MINI_HEIGHT);
             this.DoubleBuffered = true;
 
             InitPosition();
