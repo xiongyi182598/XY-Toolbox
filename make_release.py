@@ -48,6 +48,7 @@ white_list = [
     "xy_block_erase.lsp",
     "cmd_config.ini",
     "version.json",
+    "layer_mapping_rules.csv",
     "app_logo_white.png",
     "app_pure_transparent.ico",
     "install.ps1",

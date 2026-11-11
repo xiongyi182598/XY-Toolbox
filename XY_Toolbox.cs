@@ -795,6 +795,82 @@ namespace XY_Deepening_Toolbox
         }
 
         // ========================================================
+        // 双栏施工图图层智能对位工作台 (静态入口)
+        // ========================================================
+        public static void ShowLayerMappingWorkbenchCommand()
+        {
+            EnsureLspLoaded();
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                LayerMappingWorkbench.Views.LayerMappingViewWindow.ShowWorkbench(doc.Database);
+            }
+            catch (System.Exception ex)
+            {
+                if (doc.Editor != null)
+                {
+                    doc.Editor.WriteMessage("\n[错误] 智能对位看板呼出失败: " + ex.Message + "\n");
+                }
+            }
+        }
+
+        // ========================================================
+        // 外部 DWG 视口无损移植引擎 (静态入口)
+        // ========================================================
+        public static void ShowViewportCloneCommand()
+        {
+            EnsureLspLoaded();
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            try
+            {
+                // 确保恢复 AutoCAD FILEDIA 系统变量为 1
+                try
+                {
+                    object fileDia = Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("FILEDIA");
+                    if (fileDia != null && Convert.ToInt32(fileDia) == 0)
+                    {
+                        Autodesk.AutoCAD.ApplicationServices.Application.SetSystemVariable("FILEDIA", 1);
+                    }
+                }
+                catch { }
+
+                // 使用原生 Windows 对话框，彻底杜绝命令行被拦截或 FILEDIA=0 导致无法弹窗
+                System.Windows.Forms.OpenFileDialog dlg = new System.Windows.Forms.OpenFileDialog();
+                dlg.Title = "选择源标准图纸 (提取视口)";
+                dlg.Filter = "AutoCAD 图纸 (*.dwg)|*.dwg|所有文件 (*.*)|*.*";
+                dlg.Multiselect = false;
+
+                try
+                {
+                    Database curDb = HostApplicationServices.WorkingDatabase;
+                    if (curDb != null && !string.IsNullOrEmpty(curDb.Filename))
+                    {
+                        string dir = Path.GetDirectoryName(curDb.Filename);
+                        if (Directory.Exists(dir))
+                        {
+                            dlg.InitialDirectory = dir;
+                        }
+                    }
+                }
+                catch { }
+
+                if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                {
+                    return;
+                }
+
+                LayerMappingWorkbench.Views.ViewportCloneDialog.ShowDialog(dlg.FileName);
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage("\n[错误] 视口无损移植引擎呼出失败: " + ex.Message + "\n");
+            }
+        }
+
+        // ========================================================
         // 极速套用上次方案一键翻图 (XFT / HBL / FLIPNOW / QUICKFLIP)
         // 纯内存级无黑屏秒级套用上次规则，支持图层合并、同名块重定义与视口继承
         // ========================================================
@@ -1015,7 +1091,7 @@ namespace XY_Deepening_Toolbox
             bool ok = LayerMergeDialog.FastLayerMerge(srcLayer, tarLayer, true, true, out entCount, out vpCount);
             if (ok)
             {
-                ed.WriteMessage(string.Format("\n★ [XY工具箱] 极速合并成功: [{0}] -> [{1}] (处理图元: {2}, 视口同步: {3})\n",
+                ed.WriteMessage(string.Format("\n★ [XY工具箱] 极速合并成功: [{0}] -> [{1}] (处理图元: {2}, 视口同步: {3} | 已自动叠加记录到本次工作流)\n",
                     srcLayer, tarLayer, entCount, vpCount));
             }
             else
@@ -2558,8 +2634,8 @@ namespace XY_Deepening_Toolbox
 
             int top = 12;
 
-            // 分组 1: 图层工具 (8项)
-            AddSectionHeader(pnlScroll, ref top, "▼ 【图层工具】 (共 8 项核心功能)", Color.FromArgb(100, 200, 255));
+            // 分组 1: 图层工具 (10项)
+            AddSectionHeader(pnlScroll, ref top, "▼ 【图层工具】 (共 10 项核心功能)", Color.FromArgb(100, 200, 255));
             AddItem(pnlScroll, ref top, "CMD_MERGE_QUICK", "1. 极速合层 (免弹窗直选)", "(连续点击源图元与目标图元秒级合并)", "XJH, HB1");
             AddItem(pnlScroll, ref top, "CMD_MERGE", "2. 图层合并 (高级面板版)", "(弹出独立可视化面板：前缀规范/洗层/继承)", "XHB, HB2");
             AddItem(pnlScroll, ref top, "CMD_VP_OVERRIDE", "3. 视口图层 (视口样式覆盖)", "(当前布局视口颜色/线型局部覆盖与快速置灰)", "SK, SKYS");
@@ -2568,6 +2644,8 @@ namespace XY_Deepening_Toolbox
             AddItem(pnlScroll, ref top, "CMD_LAYER_PURGE", "6. 清理空层 (秒级移除冗余)", "(0.05秒极速物理安全移除全部未使用空图层)", "XQTC");
             AddItem(pnlScroll, ref top, "CMD_DETECT", "7. 图元探测 (穿透信息查看)", "(穿透多重复杂嵌套图块，直接探测深层图层与文字)", "XTC");
             AddItem(pnlScroll, ref top, "CMD_LAYER_COMPARE", "8. 图层对比 (引用比对合并)", "(自动比对图层线型颜色，智能评分并一键合并)", "LYCOMPARE");
+            AddItem(pnlScroll, ref top, "CMD_LAYER_WORKBENCH", "9. 智能对位 (双栏看板合并)", "(语义加权对齐、持久化CSV映射与块深度穿透)", "XDB, LMW");
+            AddItem(pnlScroll, ref top, "CMD_VP_CLONE", "10. 视口移植 (跨DWG无损克隆)", "(跨图纸提取布局视口，无损克隆剪裁边界与相机)", "XSK, VPCLONE");
 
             top += 6;
             // 分组 2: 图块工具 (5项)
@@ -4066,7 +4144,7 @@ namespace XY_Deepening_Toolbox
                     Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                     if (doc != null)
                     {
-                        doc.Editor.WriteMessage(string.Format("\n★ [XY工具箱] 图层合并成功: [{0}] -> [{1}] (处理图元: {2}, 视口同步: {3})\n", 
+                        doc.Editor.WriteMessage(string.Format("\n★ [XY工具箱] 图层合并成功: [{0}] -> [{1}] (处理图元: {2}, 视口同步: {3} | 已自动叠加记录到本次工作流)\n", 
                             src, tar, entCount, vpCount));
                     }
                 }
@@ -4336,6 +4414,13 @@ namespace XY_Deepening_Toolbox
                     }
                 }
 
+                // 自动接入本次 CAD 任务工作流与规则沉淀流 (HB1 / HB2 实时无感记忆)
+                try
+                {
+                    LayerMappingWorkbench.Services.LayerAlignmentEngine.RecordSessionRule(db, srcName, tarName, forceByLayer);
+                }
+                catch { }
+
                 // 5. 彻底移除全图 Regen (绝无“正在生成布局/模型”及全屏黑屏)，采用轻量平滑的 UpdateScreen 瞬间就绪
                 try
                 {
@@ -4576,7 +4661,7 @@ namespace XY_Deepening_Toolbox
             _sections.Clear();
 
             // 分类 1: 图层工具 (默认展开，单行高密度排布)
-            CategorySection sec1 = CreateCategorySection("图层工具", 8, true);
+            CategorySection sec1 = CreateCategorySection("图层工具", 10, true);
             AddItemRowToSection(sec1, "🎨", "图层合并", "XHB", 
                 "图层合并 (XHB)\n弹出独立可视化面板：前缀规范/层名修改/颜色线型/属性继承", 
                 () => Commands.ShowLayerMergeDialog());
@@ -4598,9 +4683,15 @@ namespace XY_Deepening_Toolbox
             AddItemRowToSection(sec1, "🔬", "图层对比", "LYC", 
                 "图层对比 (LYC / LYCOMPARE)\n加载引用图纸，自动比对图层/线型/颜色，智能评分并一键合并", 
                 () => Commands.ShowLayerCompareDialog());
+            AddItemRowToSection(sec1, "📐", "智能对位", "XDB", 
+                "智能对位工作台 (XDB / LMW_WORKBENCH)\n双栏施工图图层智能对标看板：语义加权对齐、持久化CSV映射与块深度穿透合并", 
+                () => Commands.ShowLayerMappingWorkbenchCommand());
             AddItemRowToSection(sec1, "👁️", "视口图层", "SK", 
                 "视口图层 (SK / SKYS)\n悬浮弹窗穿透拾取图层，快速修改当前视口的颜色与线型覆盖", 
                 () => ViewportLayerForm.ShowFloatingPalette());
+            AddItemRowToSection(sec1, "🪟", "视口移植", "XSK", 
+                "视口无损移植 (XSK / LMW_VPCLONE)\n跨外部DWG视口抽取引擎：无损克隆非矩形剪裁边界、DCS几何与视口覆盖", 
+                () => Commands.ShowViewportCloneCommand());
             RegisterSection(sec1);
 
             // 分类 2: 图块工具 (默认展开，方便直观查看)
@@ -4624,9 +4715,9 @@ namespace XY_Deepening_Toolbox
 
             // 分类 3: 辅助工具 (默认折叠)
             CategorySection sec3 = CreateCategorySection("辅助工具", 2, false);
-            AddItemRowToSection(sec3, "🔄", "视口重置", "XSK", 
-                "视口重置 (XSK)\n一键快速清除当前图纸布局视口内多余的图层颜色与线型覆盖", 
-                () => SendCadCommand("XSK "));
+            AddItemRowToSection(sec3, "🔄", "视口重置", "SK0", 
+                "视口重置 (SK0)\n一键快速清除当前图纸布局视口内多余的图层颜色与线型覆盖", 
+                () => SendCadCommand("SK0 "));
             AddItemRowToSection(sec3, "🗑️", "深度清理", "XQL", 
                 "深度清理 (XQL)\n深度物理清理全图无用废弃图层、孤立图块、注册应用与无效字典", 
                 () => SendCadCommand("XQL "));
@@ -4737,70 +4828,60 @@ namespace XY_Deepening_Toolbox
         {
             int rowY = sec.ContentHeight;
             int rowH = 22; // 海龙经典紧凑行高 22px
+            string displayText = string.Format("{0}<{1}>", title, hotkey.ToLower());
 
             Panel row = new Panel();
             row.Location = new Point(0, rowY);
             row.Size = new Size(104, rowH);
-            row.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             row.BackColor = Color.FromArgb(22, 25, 31);
             row.Cursor = Cursors.Hand;
 
-            // 1. 图标 Glyph (16x16 视觉)
-            Label lblIcon = new Label();
-            lblIcon.Text = iconGlyph;
-            lblIcon.Font = new Font("Segoe UI Emoji", 8F, FontStyle.Regular);
-            lblIcon.ForeColor = Color.White;
-            lblIcon.Location = new Point(2, 2);
-            lblIcon.Size = new Size(16, 17);
-            lblIcon.TextAlign = ContentAlignment.MiddleCenter;
-            lblIcon.UseCompatibleTextRendering = false;
-            row.Controls.Add(lblIcon);
+            bool isHover = false;
 
-            // 2. 功能名与快捷键合一 (海龙1:1经典排版: "图层合并<xhb>")
-            Label lblText = new Label();
-            lblText.Text = string.Format("{0}<{1}>", title, hotkey.ToLower());
-            lblText.Font = new Font("SimSun", 9F, FontStyle.Regular);
-            lblText.ForeColor = Color.FromArgb(245, 245, 245);
-            lblText.Location = new Point(18, 3);
-            lblText.Size = new Size(row.Width - 20, 16);
-            lblText.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            lblText.AutoEllipsis = true;
-            lblText.UseCompatibleTextRendering = true;
-            row.Controls.Add(lblText);
-
-            // 3. 浮动详细说明 ToolTip
-            toolTipHelp.SetToolTip(row, desc);
-            toolTipHelp.SetToolTip(lblIcon, desc);
-            toolTipHelp.SetToolTip(lblText, desc);
-
-            // 4. 悬浮反馈 (Hover) 与底部分割线
             row.Paint += (s, e) => {
+                Graphics g = e.Graphics;
+                if (isHover)
+                {
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(38, 56, 84)))
+                    {
+                        g.FillRectangle(sb, 0, 0, row.Width, row.Height);
+                    }
+                }
+
+                // 底部分割线
                 using (Pen p = new Pen(Color.FromArgb(28, 32, 40)))
                 {
-                    e.Graphics.DrawLine(p, 2, row.Height - 1, row.Width - 2, row.Height - 1);
+                    g.DrawLine(p, 2, row.Height - 1, row.Width - 2, row.Height - 1);
+                }
+
+                // 1. 图标 Glyph (16x16 居中)
+                using (Font iconFont = new Font("Segoe UI Emoji", 8F, FontStyle.Regular))
+                {
+                    TextRenderer.DrawText(g, iconGlyph, iconFont, new Rectangle(2, 1, 20, 20), Color.White,
+                        TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
+                }
+
+                // 2. 纯白高对比功能名与快捷键 (微软简繁原生清晰字体，100% 杜绝 WinForms 控件折叠消失)
+                using (Font textFont = new Font("Microsoft YaHei", 9F, FontStyle.Regular))
+                {
+                    Color textColor = isHover ? Color.White : Color.FromArgb(235, 240, 248);
+                    int textWidth = Math.Max(100, row.Width - 26);
+                    TextRenderer.DrawText(g, displayText, textFont, new Rectangle(24, 0, textWidth, row.Height), textColor,
+                        TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
                 }
             };
 
-            Action onEnter = () => {
-                row.BackColor = Color.FromArgb(38, 56, 84); // 海龙经典深天蓝高亮
-                lblText.ForeColor = Color.White;
+            row.MouseEnter += (s, e) => {
+                isHover = true;
+                row.Invalidate();
             };
-            Action onLeave = () => {
-                row.BackColor = Color.FromArgb(22, 25, 31);
-                lblText.ForeColor = Color.FromArgb(245, 245, 245);
+            row.MouseLeave += (s, e) => {
+                isHover = false;
+                row.Invalidate();
             };
-
-            row.MouseEnter += (s, e) => onEnter();
-            row.MouseLeave += (s, e) => onLeave();
             row.Click += (s, e) => onClick();
 
-            foreach (Control c in row.Controls)
-            {
-                c.Cursor = Cursors.Hand;
-                c.MouseEnter += (s, e) => onEnter();
-                c.MouseLeave += (s, e) => onLeave();
-                c.Click += (s, e) => onClick();
-            }
+            toolTipHelp.SetToolTip(row, desc);
 
             sec.ContentPanel.Controls.Add(row);
             sec.ContentHeight += rowH;

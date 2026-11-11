@@ -447,6 +447,11 @@ namespace XY_Deepening_Toolbox
                     if (item.IsSelectedForMerge && !string.IsNullOrEmpty(item.TargetLayerName))
                     {
                         lastPreset.LayerMappings[item.CurrentLayer.Name] = item.TargetLayerName;
+                        try
+                        {
+                            LayerMappingWorkbench.Services.LayerAlignmentEngine.RecordSessionRule(db, item.CurrentLayer.Name, item.TargetLayerName, options.ResetEntitiesByLayer);
+                        }
+                        catch { }
                     }
                 }
 
@@ -590,8 +595,34 @@ namespace XY_Deepening_Toolbox
             FlipRulePreset preset = FlipRuleStorage.LoadLastPreset();
             if (preset == null || preset.LayerMappings == null || preset.LayerMappings.Count == 0)
             {
+                // 智能回退探测图层映射工作台的持久化 CSV 规则库
+                try
+                {
+                    string csvPath = LayerMappingWorkbench.Services.LayerAlignmentEngine.GetDefaultRuleFilePath(db != null ? db.Filename : null);
+                    if (File.Exists(csvPath))
+                    {
+                        List<LayerMappingWorkbench.Models.LayerMapRule> csvRules = LayerMappingWorkbench.Services.LayerAlignmentEngine.LoadRulesFromCsv(csvPath);
+                        if (csvRules != null && csvRules.Count > 0)
+                        {
+                            preset = new FlipRulePreset();
+                            preset.PresetName = "工作台CSV规则记忆";
+                            foreach (var r in csvRules)
+                            {
+                                if (!string.IsNullOrEmpty(r.SourceLayer) && !string.IsNullOrEmpty(r.TargetLayer))
+                                {
+                                    preset.LayerMappings[r.SourceLayer] = r.TargetLayer;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (preset == null || preset.LayerMappings == null || preset.LayerMappings.Count == 0)
+            {
                 MergeReport r = new MergeReport();
-                r.SummaryMessage = "未检测到历史翻图记忆记录。请先在【图层对比合并】面板(XTC/HB2)中进行一次标准对比翻图！";
+                r.SummaryMessage = "未检测到历史翻图记忆记录。请先在【图层智能对位工作台】(XDB/LMW_WORKBENCH) 或【图层对比合并】面板中执行一次翻图或导入映射规则！";
                 return r;
             }
 

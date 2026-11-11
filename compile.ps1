@@ -43,7 +43,16 @@ $sources = @(
     "LayerCompareForm.cs",
     "LayerCompareEngine.cs",
     "LayerDeepMergeService.cs",
-    "HailongService.cs"
+    "HailongService.cs",
+    "LayerMappingWorkbench\Models\LayerMapRule.cs",
+    "LayerMappingWorkbench\Models\LayerCompareItem.cs",
+    "LayerMappingWorkbench\Services\LayerAlignmentEngine.cs",
+    "LayerMappingWorkbench\Services\LayerMergeService.cs",
+    "LayerMappingWorkbench\Services\ViewportCloneService.cs",
+    "LayerMappingWorkbench\ViewModels\LayerMappingViewModel.cs",
+    "LayerMappingWorkbench\Views\LayerMappingView.cs",
+    "LayerMappingWorkbench\Views\ViewportCloneDialog.cs",
+    "LayerMappingWorkbench\Commands\ExtensionCommands.cs"
 )
 
 $argsList = @("/target:library", "/platform:x64", "/out:XY_Toolbox.dll") + $refs + $sources
@@ -53,8 +62,21 @@ Write-Host "Compiling XY_Toolbox.dll..."
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Build success! Output: XY_Toolbox.dll" -ForegroundColor Green
-    Copy-Item -Path "XY_Toolbox.dll" -Destination "XY_Toolbox_109.dll" -Force -ErrorAction SilentlyContinue
-    Write-Host "Synced: XY_Toolbox_109.dll" -ForegroundColor Green
+    $existing = Get-ChildItem -Path "XY_Toolbox_*.dll" -ErrorAction SilentlyContinue | Where-Object { $_.BaseName -match '^XY_Toolbox_(\d+)$' } | ForEach-Object { [int]$Matches[1] }
+    $startVer = 119
+    if ($existing) {
+        $maxVer = ($existing | Measure-Object -Maximum).Maximum
+        $startVer = $maxVer + 1
+    }
+    for ($i = $startVer; $i -le ($startVer + 50); $i++) {
+        try {
+            Copy-Item -Path "XY_Toolbox.dll" -Destination "XY_Toolbox_$i.dll" -Force -ErrorAction Stop
+            Write-Host "Synced: XY_Toolbox_$i.dll" -ForegroundColor Green
+            break
+        } catch {
+            continue
+        }
+    }
 } else {
     Write-Host "Build failed with exit code: $LASTEXITCODE" -ForegroundColor Red
 }

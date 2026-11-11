@@ -1,0 +1,12 @@
+﻿# XY-Toolbox 施工图图层映射规则字典 (支持在 Excel/WPS 中直接编辑维护)
+SourceLayer(源图层),TargetLayer(目标标准图层),ForceByLayer(强制颜色线型随层)
+0,0,True
+Defpoints,Defpoints,True
+RC-Modelling【天花造型】,UDG-C-顶面造型线,True
+FC-Material【地坪分割线】,UDG-F-地坪分割线,True
+FF-Fixed【固定家具】,UDG-P-固定高柜,True
+Wall【墙体】,UDG-A-土建墙柱,True
+FF-FURN【成品家具】,UDG-P-活动家具,True
+FF-FIXT【洁具】,UDG-P-洁具及配件,True
+WALL_MIDWAY,UDG-A-土建墙柱,True
+FC_TEMP,UDG-F-地坪铺装,False

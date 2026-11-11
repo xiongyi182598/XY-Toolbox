@@ -1187,7 +1187,7 @@ namespace XY_Deepening_Toolbox
                             item.IsSelectedForMerge ? "是" : "否"));
                     }
 
-                    File.WriteAllText(sfd.FileName, sb.ToString(), Encoding.UTF8);
+                    File.WriteAllText(sfd.FileName, sb.ToString(), new UTF8Encoding(true));
                     MessageBox.Show(this, "报表已成功导出至:\n" + sfd.FileName, "导出成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
