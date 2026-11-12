@@ -67,6 +67,8 @@
 (defun c:my  () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:XSY () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:xsy () (c:UNIVERSAL_MOVE_TEXT))
+(defun c:XGA () (c:UNIVERSAL_MOVE_TEXT))
+(defun c:xga () (c:UNIVERSAL_MOVE_TEXT))
 
 ;; 7. 实体智能检测
 (defun c:TC  () (c:DETECT_ENTITY))

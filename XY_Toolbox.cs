@@ -12,9 +12,11 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Windows;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.GraphicsInterface;
-using Font = System.Drawing.Font;
 using System.Data;
+using Font = System.Drawing.Font;
 using XY_Toolbox;
+using AttributeWorkbench.Services;
+using AttributeWorkbench.Views;
 
 [assembly: ExtensionApplication(typeof(XY_Deepening_Toolbox.PluginApp))]
 [assembly: CommandClass(typeof(XY_Deepening_Toolbox.Commands))]
@@ -597,6 +599,22 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("XYREFRESH")]
         public static void ForceReloadPalette()
         {
+            try
+            {
+                if (_paletteSet != null)
+                {
+                    while (_paletteSet.Count > 0)
+                    {
+                        try { _paletteSet.Remove(0); } catch { }
+                    }
+                    _control = new ToolboxControl();
+                    _paletteSet.Add("XY工具箱", _control);
+                    _paletteSet.Visible = true;
+                    _paletteSet.RolledUp = false;
+                    return;
+                }
+            }
+            catch { }
             ShowToolboxPalette();
         }
 
@@ -1861,15 +1879,20 @@ namespace XY_Deepening_Toolbox
 
         // ========================================================
         // 属性块单字穿透动态平移 (MW / MY / MOVETEXT)
+        // ========================================================
+        // 12. 属性块单字修改与全图同名块联动同步 (XSY / MW / MY / XGA / XY_ATTMOD)
         // 核心亮点：
-        // 1. 同名块全部同步更新：修改一处，全图（模型+所有布局空间）同名图块全部联动平移
-        // 2. 块定义与实例双向数学映射：彻底杜绝视口比例缩放与 REGEN 位置还原 BUG
-        // 3. DrawJig 实时平滑拖拽预览 + 键盘精确数值输入
-        // 4. 单字精准穿透：同一图块内多行文字（如标题、比例、图号）完全独立分别平移
+        // 1. 同名块全部同步更新：修改一处，全图（模型+所有布局空间）同名图块全部联动 (字高与位置)
+        // 2. 块定义与实例双向数学映射：修改同时更新 AttributeDefinition，ATTSYNC 不重置，视口比例无偏移
+        // 3. 悬浮微卡片可视化调字高：预设工程规格、步进增减、倍率缩放与自由数值设置
+        // 4. DrawJig 实时平滑拖拽预览 + 键盘精确数值输入
+        // 5. 单字精准穿透：同一图块内多行文字（如门编号、标题、图号）完全独立修改
         // ========================================================
         [CommandMethod("XSY")]
         [CommandMethod("MW")]
         [CommandMethod("MY")]
+        [CommandMethod("XGA")]
+        [CommandMethod("XY_ATTMOD")]
         [CommandMethod("XY_MOVETEXT")]
         [CommandMethod("MOVETEXT")]
         public static void MoveSingleAttributeText()
@@ -1880,137 +1903,30 @@ namespace XY_Deepening_Toolbox
             Database db = doc.Database;
             Editor ed = doc.Editor;
 
-            while (true)
+            PromptNestedEntityOptions opt = new PromptNestedEntityOptions("\n>> 请点选要修改的属性文字 (同名图块将全部同步更新，按ESC或回车退出): ");
+            PromptNestedEntityResult res = ed.GetNestedEntity(opt);
+            if (res.Status != PromptStatus.OK) return;
+
+            AttributeTargetInfo target = null;
+            using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                PromptNestedEntityOptions opt = new PromptNestedEntityOptions("\n>> 请点选要平移的属性文字 (同名图块将全部同步更新，按ESC或回车退出): ");
-                PromptNestedEntityResult res = ed.GetNestedEntity(opt);
-                if (res.Status != PromptStatus.OK) break;
-
-                using (doc.LockDocument())
-                {
-                    using (Transaction tr = db.TransactionManager.StartTransaction())
-                    {
-                        DBObject obj = tr.GetObject(res.ObjectId, OpenMode.ForRead);
-                        AttributeReference attRef = obj as AttributeReference;
-                        if (attRef == null)
-                        {
-                            ed.WriteMessage("\n[提示] 所选图元不是属性文字(AttributeReference)，请重新直接点击图块内的文字。\n");
-                            tr.Abort();
-                            continue;
-                        }
-
-                        // 获取所属母块引用
-                        BlockReference parentBlk = tr.GetObject(attRef.OwnerId, OpenMode.ForRead) as BlockReference;
-                        if (parentBlk == null)
-                        {
-                            ObjectId[] containers = res.GetContainers();
-                            if (containers != null && containers.Length > 0)
-                            {
-                                parentBlk = tr.GetObject(containers[0], OpenMode.ForRead) as BlockReference;
-                            }
-                        }
-
-                        if (parentBlk == null)
-                        {
-                            ed.WriteMessage("\n[提示] 未能获取该文字所在的图块参照。\n");
-                            tr.Abort();
-                            continue;
-                        }
-
-                        string targetTag = attRef.Tag;
-                        BlockTableRecord btr = (BlockTableRecord)tr.GetObject(parentBlk.BlockTableRecord, OpenMode.ForWrite);
-                        string blockName = btr.Name;
-
-                        ed.WriteMessage(string.Format("\n>> 选中属性: 【{0}】 当前内容: \"{1}\" (图块: 【{2}】)", targetTag, attRef.TextString, blockName));
-
-                        // 1. 动态拖拽拾取基点
-                        Point3d basePt = res.PickedPoint;
-
-                        // 2. 启动原生 DrawJig 实时拖拽
-                        AttributeTextMoveJig jig = new AttributeTextMoveJig(basePt, attRef);
-                        PromptResult dragRes = ed.Drag(jig);
-
-                        if (dragRes.Status != PromptStatus.OK)
-                        {
-                            tr.Abort();
-                            continue;
-                        }
-
-                        Vector3d wcsDisp = jig.DisplacementVector;
-                        if (wcsDisp.IsZeroLength())
-                        {
-                            tr.Abort();
-                            continue;
-                        }
-
-                        // 3. 将 WCS 位移逆变换为母块定义内部的局部坐标系位移 (localDisp)
-                        // 彻底解决布局视口与模型空间比例不一致、刷新还原的世纪难题！
-                        Matrix3d invMat = parentBlk.BlockTransform.Inverse();
-                        Vector3d localDisp = wcsDisp.TransformBy(invMat);
-
-                        // 4. 同步更新块定义内部的 AttributeDefinition
-                        foreach (ObjectId entId in btr)
-                        {
-                            AttributeDefinition attDef = tr.GetObject(entId, OpenMode.ForRead) as AttributeDefinition;
-                            if (attDef != null && string.Equals(attDef.Tag, targetTag, StringComparison.OrdinalIgnoreCase))
-                            {
-                                attDef.UpgradeOpen();
-                                attDef.TransformBy(Matrix3d.Displacement(localDisp));
-                                attDef.AdjustAlignment(db);
-                                break;
-                            }
-                        }
-
-                        // 5. 收集并同步更新全图（模型空间 + 所有布局图纸空间）所有同名块实例
-                        HashSet<ObjectId> allRefIds = new HashSet<ObjectId>();
-                        foreach (ObjectId id in btr.GetBlockReferenceIds(true, true))
-                        {
-                            allRefIds.Add(id);
-                        }
-
-                        // 支持动态块所有匿名派生实例
-                        if (parentBlk.IsDynamicBlock)
-                        {
-                            BlockTableRecord dynBtr = (BlockTableRecord)tr.GetObject(parentBlk.DynamicBlockTableRecord, OpenMode.ForRead);
-                            foreach (ObjectId id in dynBtr.GetBlockReferenceIds(true, true)) allRefIds.Add(id);
-                            foreach (ObjectId anonId in dynBtr.GetAnonymousBlockIds())
-                            {
-                                BlockTableRecord anonBtr = (BlockTableRecord)tr.GetObject(anonId, OpenMode.ForRead);
-                                foreach (ObjectId id in anonBtr.GetBlockReferenceIds(true, true)) allRefIds.Add(id);
-                            }
-                        }
-
-                        int syncCount = 0;
-                        foreach (ObjectId refId in allRefIds)
-                        {
-                            BlockReference bRef = tr.GetObject(refId, OpenMode.ForRead) as BlockReference;
-                            if (bRef == null) continue;
-
-                            // 各实例根据自身的插入比例和旋转矩阵，精确映射位移
-                            Vector3d instDisp = localDisp.TransformBy(bRef.BlockTransform);
-
-                            foreach (ObjectId attId in bRef.AttributeCollection)
-                            {
-                                AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                                if (att != null && string.Equals(att.Tag, targetTag, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    att.UpgradeOpen();
-                                    att.LockPositionInBlock = false;
-                                    att.TransformBy(Matrix3d.Displacement(instDisp));
-                                    att.AdjustAlignment(db);
-                                    att.RecordGraphicsModified(true);
-                                    syncCount++;
-                                    break;
-                                }
-                            }
-                        }
-
-                        tr.Commit();
-                        ed.UpdateScreen();
-                        ed.WriteMessage(string.Format("\n✔ [XY工具箱] 属性文字【{0}】已成功同步更新全图 {1} 处同名块！\n", targetTag, syncCount));
-                    }
-                }
+                target = AttributeModifyService.ExtractTargetInfo(res.ObjectId, res.PickedPoint, res.GetContainers(), tr);
+                tr.Commit();
             }
+
+            if (target == null)
+            {
+                ed.WriteMessage("\n[提示] 所选图元不是属性文字(AttributeReference)，请重新直接点击图块内的文字。\n");
+                return;
+            }
+
+            ed.WriteMessage(string.Format("\n>> 选中属性: 【{0}】 当前内容: \"{1}\" | 当前字高: {2:0.###} (图块: 【{3}】)",
+                target.Tag, target.TextString, target.CurrentHeight, target.BlockName));
+
+            AttributeModifyDialog.ShowDialog(doc, target, delegate
+            {
+                try { doc.SendStringToExecute("XSY ", true, false, false); } catch { }
+            });
         }
 
         // ========================================================
@@ -2653,7 +2569,7 @@ namespace XY_Deepening_Toolbox
             AddItem(pnlScroll, ref top, "CMD_BLOCK_ERASE", "9. 穿透删除 (免炸开删图元)", "(穿透删除块内线条，按 M 键切换【联动】或【独占】)", "KSC, XSC, BDE");
             AddItem(pnlScroll, ref top, "CMD_FIX_TEXT", "10. 翻正反字 (智能纠正反字)", "(大面积框选穿透原位纠偏镜像文字，几何中心不移位)", "FZW, XFZ");
             AddItem(pnlScroll, ref top, "CMD_BLOCK_STRETCH", "11. 原位编块 (免在位拉伸平移)", "(外部框选块内线条静默S拉伸或M平移，无感修改)", "XKB, XLS");
-            AddItem(pnlScroll, ref top, "CMD_MOVE_TEXT", "12. 属性平移 (单字动态微调)", "(动态Jig拖拽微调属性文字，模型与视口全联动)", "XSY, MW, MY");
+            AddItem(pnlScroll, ref top, "CMD_MOVE_TEXT", "12. 属性修改 (字高与位置调整)", "(可视化调整属性文字字高、动态Jig平移拖拽，模型与视口全联动)", "XSY, MW, MY, XGA");
             AddItem(pnlScroll, ref top, "CMD_BLOCK_ZERO", "13. 图块归零 (深度归至0层)", "(穿透各级嵌套块，强制将内部全部图元深度归入0层)", "XGL, B0");
 
             top += 6;
@@ -4711,8 +4627,8 @@ namespace XY_Deepening_Toolbox
             AddItemRowToSection(sec2, "✏️", "原位编块", "XKB", 
                 "原位编块 (XKB / XLS)\n免在位编辑/免炸开，直接外部框选块内线条静默S拉伸或M平移，像没成块一样无感修改", 
                 () => SendCadCommand("XKB "));
-            AddItemRowToSection(sec2, "↔️", "属性平移", "XSY", 
-                "属性平移 (XSY)\n单字穿透平移，实时Jig动态拖动预览，全图模型与视口同名图块全部联动同步", 
+            AddItemRowToSection(sec2, "🔤", "属性修改", "XSY", 
+                "属性修改 (XSY / MW / MY / XGA)\n穿透拾取图块属性文字，可视化调节字高(预设规格/微调/输入)、实时拖拽平移位置，全图同名块同名属性全部同步", 
                 () => SendCadCommand("XSY "));
             AddItemRowToSection(sec2, "🧹", "图块归零", "XGL", 
                 "图块归零 (XGL)\n穿透嵌套块，彻底清洗全图所有图块内部图元至0层，颜色线型归ByLayer", 

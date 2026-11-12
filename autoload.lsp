@@ -123,7 +123,7 @@
 )
 
 (defun xy:load-latest-dll ( / dir all-files best-dll best-ver f v target-path cache-dir )
-  (if (not *XY-TOOLBOX-LOADED*)
+  (if (or (not *XY-TOOLBOX-LOADED*) (and *CURRENT-LOADED-VER* (> best-ver *CURRENT-LOADED-VER*)))
     (progn
       (setq dir (xy:get-toolbox-dir))
       (if (and dir (/= dir ""))
@@ -164,6 +164,7 @@
                 (vl-catch-all-apply 'vl-cmdf (list "netload" target-path))
               )
               (setq *XY-TOOLBOX-LOADED* t)
+              (setq *CURRENT-LOADED-VER* best-ver)
 
               ;; 4. ��Ĭ������ʷ�ɰ汾�ļ�
               (foreach f all-files
@@ -1661,6 +1662,9 @@
 (defun c:XDK () (command "XDJ") (princ))
 (defun c:XTC () (if c:detect_sub_entity (c:detect_sub_entity) (princ "\n���ȼ��� XY�����䣡")))
 (defun c:XSY () (if c:MW (c:MW) (princ "\n���ȼ��� XY�����䣡")))
+(defun c:xsy () (c:XSY))
+(defun c:XGA () (c:XSY))
+(defun c:xga () (c:XSY))
 (defun c:XGL () (if c:B0 (c:B0) (princ "\n���ȼ��� XY�����䣡")))
 (defun c:XKL () (c:XGL))
 (defun c:FZW () (vl-cmdf "FZW"))
@@ -1696,6 +1700,7 @@
         (apply_all_toolbox_shortcuts)
       )
       ;; ��ȫ���� C# ����̨���ˢ�£�������Ѵ�����
+      (vl-catch-all-apply 'xy:load-latest-dll)
       (vl-catch-all-apply 'vl-cmdf (list "XY_UPDATE_PANEL"))
       (princ "\n========================================================\n")
       (princ "�� [XY������] ����������ȫ�׿�ݼ������سɹ� (XCZ)��\n")

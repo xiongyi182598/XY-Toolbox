@@ -60,7 +60,9 @@ $sources = @(
     "TextFilterWorkbench\Models\TextFilterCriteria.cs",
     "TextFilterWorkbench\Services\TextFilterService.cs",
     "TextFilterWorkbench\Views\TextFilterDialog.cs",
-    "TextFilterWorkbench\Commands\TextFilterCommands.cs"
+    "TextFilterWorkbench\Commands\TextFilterCommands.cs",
+    "AttributeWorkbench\Services\AttributeModifyService.cs",
+    "AttributeWorkbench\Views\AttributeModifyDialog.cs"
 )
 
 $argsList = @("/target:library", "/platform:x64", "/codepage:65001", "/out:XY_Toolbox.dll") + $refs + $sources
