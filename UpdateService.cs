@@ -42,8 +42,8 @@ namespace XY_Toolbox
     public static class UpdateService
     {
         // 本地当前版本常量
-        public const string CURRENT_VERSION = "1.1.0";
-        public const int CURRENT_VERSION_CODE = 123;
+        public const string CURRENT_VERSION = "1.1.1";
+        public const int CURRENT_VERSION_CODE = 136;
         public const string GITHUB_REPO_URL = "https://github.com/xiongyi182598/XY-Toolbox";
 
         // 多镜像版本信息地址源（优先国内加速通道）

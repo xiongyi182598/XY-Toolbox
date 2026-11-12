@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+using LayerMappingWorkbench.Models;
 using LayerMappingWorkbench.Services;
 using LayerMappingWorkbench.Views;
 
@@ -123,6 +125,197 @@ namespace LayerMappingWorkbench.Commands
             catch (System.Exception ex)
             {
                 ed.WriteMessage(string.Format("\n[错误] 视口无损移植引擎呼出失败: {0}\n", ex.Message));
+            }
+        }
+
+        // ========================================================
+        // 诊断命令：自动化跑通测试移植流程并全面验证视口内属性
+        // 命令: TEST_CLONE_RUN
+        // ========================================================
+        [CommandMethod("TEST_CLONE_RUN")]
+        public void TestCloneRun()
+        {
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+            string logPath = @"C:\Users\1\.gemini\antigravity-ide\brain\f7989972-3d33-4112-8568-9be7a8448479\scratch\test_clone_log.txt";
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+            try
+            {
+                string srcPath = @"C:\Users\1\Documents\test02.dwg";
+                sb.AppendLine("=== [TEST_CLONE_RUN] 自动化视口移植诊断测试启动 ===");
+                sb.AppendLine("源 DWG: " + srcPath);
+                sb.AppendLine("目标 DWG: " + doc.Database.Filename);
+
+                // 1. 扫描当前目标图纸已存在的图层与模型空间图元分布
+                using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
+                {
+                    LayerTable lt = (LayerTable)tr.GetObject(doc.Database.LayerTableId, OpenMode.ForRead);
+                    sb.AppendLine("\n--- 目标图纸已有图层列表 ---");
+                    foreach (ObjectId layId in lt)
+                    {
+                        LayerTableRecord ltr = (LayerTableRecord)tr.GetObject(layId, OpenMode.ForRead);
+                        sb.AppendLine(string.Format("  Target Layer: {0} (Color={1}, Linetype={2})", ltr.Name, ltr.Color.ColorIndex, ltr.LinetypeObjectId));
+                    }
+
+                    ObjectId msId = SymbolUtilityServices.GetBlockModelSpaceId(doc.Database);
+                    BlockTableRecord msBtr = (BlockTableRecord)tr.GetObject(msId, OpenMode.ForRead);
+                    Dictionary<string, int> msCounts = new Dictionary<string, int>();
+                    foreach (ObjectId entId in msBtr)
+                    {
+                        Entity ent = tr.GetObject(entId, OpenMode.ForRead, false, false) as Entity;
+                        if (ent != null)
+                        {
+                            if (!msCounts.ContainsKey(ent.Layer)) msCounts[ent.Layer] = 0;
+                            msCounts[ent.Layer]++;
+                        }
+                    }
+                    sb.AppendLine("\n--- 目标图纸模型空间图元所属图层 ---");
+                    foreach (KeyValuePair<string, int> kv in msCounts)
+                    {
+                        sb.AppendLine(string.Format("  MS Layer: {0} (图元数={1})", kv.Key, kv.Value));
+                    }
+                    tr.Commit();
+                }
+
+                // 2. 扫描源图纸中的视口与冻结图层
+                using (Database srcDb = new Database(false, true))
+                {
+                    srcDb.ReadDwgFile(srcPath, FileOpenMode.OpenForReadAndAllShare, true, "");
+                    using (Transaction srcTr = srcDb.TransactionManager.StartTransaction())
+                    {
+                        DBDictionary srcLayDict = (DBDictionary)srcTr.GetObject(srcDb.LayoutDictionaryId, OpenMode.ForRead);
+                        if (srcLayDict.Contains("布局1"))
+                        {
+                            Layout srcLay = (Layout)srcTr.GetObject(srcLayDict.GetAt("布局1"), OpenMode.ForRead);
+                            BlockTableRecord srcBtr = (BlockTableRecord)srcTr.GetObject(srcLay.BlockTableRecordId, OpenMode.ForRead);
+                            sb.AppendLine("\n--- 源 DWG (test02.dwg) 布局1 视口详情 ---");
+                            int sIdx = 0;
+                            foreach (ObjectId entId in srcBtr)
+                            {
+                                Viewport vp = srcTr.GetObject(entId, OpenMode.ForRead, false, false) as Viewport;
+                                if (vp != null)
+                                {
+                                    sb.AppendLine(string.Format("  Src VP #{0}: Number={1}, Layer={2}, W={3:F2}, H={4:F2}, Locked={5}, CustomScale={6:F6}",
+                                        sIdx++, vp.Number, vp.Layer, vp.Width, vp.Height, vp.Locked, vp.CustomScale));
+                                    ObjectIdCollection fz = vp.GetFrozenLayers();
+                                    if (fz != null && fz.Count > 0)
+                                    {
+                                        sb.Append("    FrozenLayers (" + fz.Count + "): ");
+                                        foreach (ObjectId fid in fz)
+                                        {
+                                            try
+                                            {
+                                                LayerTableRecord ltr = (LayerTableRecord)srcTr.GetObject(fid, OpenMode.ForRead);
+                                                sb.Append(ltr.Name + "; ");
+                                            }
+                                            catch { }
+                                        }
+                                        sb.AppendLine();
+                                    }
+                                    else
+                                    {
+                                        sb.AppendLine("    FrozenLayers: (none)");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. 配置并执行视口移植
+                ViewportCloneOptions opt = new ViewportCloneOptions();
+                opt.SourceDwgPath = srcPath;
+                opt.SourceLayoutName = "布局1";
+                opt.TargetLayoutId = ObjectId.Null;
+                opt.AlignMode = ModelAlignmentMode.Center;
+                opt.TargetCustomScale = -1.0;
+
+                string rulePath = LayerAlignmentEngine.GetDefaultRuleFilePath(doc.Database.Filename);
+                sb.AppendLine("\n--- 规则加载 ---");
+                sb.AppendLine("规则文件: " + rulePath);
+                List<LayerMapRule> rules = LayerAlignmentEngine.LoadRulesFromCsv(rulePath);
+                sb.AppendLine(string.Format("读取规则条数: {0}", rules.Count));
+                foreach (LayerMapRule r in rules)
+                {
+                    if (!string.IsNullOrEmpty(r.SourceLayer) && !string.IsNullOrEmpty(r.TargetLayer))
+                    {
+                        opt.LayerMappingRules[r.SourceLayer] = r.TargetLayer;
+                        sb.AppendLine(string.Format("  Rule: [{0}] -> [{1}]", r.SourceLayer, r.TargetLayer));
+                    }
+                }
+
+                ViewportCloneService svc = new ViewportCloneService();
+                ViewportCloneService.CloneResult res = svc.CloneViewportsToLayout(opt);
+                sb.AppendLine(string.Format("\n移植结果: Success={0}, Viewports={1}, Msg={2}", res.Success, res.ViewportsCloned, res.Message));
+
+                // 4. 检查目标图纸中最终视口冻结状态
+                using (Transaction tr = doc.Database.TransactionManager.StartTransaction())
+                {
+                    LayoutManager lm = LayoutManager.Current;
+                    ObjectId curLayId = ObjectId.Null;
+                    if (!string.Equals(lm.CurrentLayout, "Model", StringComparison.OrdinalIgnoreCase))
+                    {
+                        curLayId = lm.GetLayoutId(lm.CurrentLayout);
+                    }
+                    else
+                    {
+                        DBDictionary tgtLayoutDict = (DBDictionary)tr.GetObject(doc.Database.LayoutDictionaryId, OpenMode.ForRead);
+                        foreach (DBDictionaryEntry entry in tgtLayoutDict)
+                        {
+                            if (!string.Equals(entry.Key, "Model", StringComparison.OrdinalIgnoreCase))
+                            {
+                                curLayId = entry.Value;
+                                break;
+                            }
+                        }
+                    }
+                    Layout curLay = (Layout)tr.GetObject(curLayId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)tr.GetObject(curLay.BlockTableRecordId, OpenMode.ForRead);
+                    sb.AppendLine(string.Format("\n--- 目标布局 ({0}) 中现有所有视口状态 ---", curLay.LayoutName));
+                    int vpIdx = 0;
+                    foreach (ObjectId entId in btr)
+                    {
+                        Viewport vp = tr.GetObject(entId, OpenMode.ForRead, false, false) as Viewport;
+                        if (vp != null)
+                        {
+                            sb.AppendLine(string.Format("  Target VP #{0}: Number={1}, Layer={2}, W={3:F2}, H={4:F2}, CustomScale={5:F6}",
+                                vpIdx++, vp.Number, vp.Layer, vp.Width, vp.Height, vp.CustomScale));
+                            ObjectIdCollection frozen = vp.GetFrozenLayers();
+                            if (frozen != null && frozen.Count > 0)
+                            {
+                                sb.Append("    FrozenLayers (" + frozen.Count + "): ");
+                                foreach (ObjectId fId in frozen)
+                                {
+                                    LayerTableRecord fLtr = (LayerTableRecord)tr.GetObject(fId, OpenMode.ForRead);
+                                    sb.Append(fLtr.Name + "; ");
+                                }
+                                sb.AppendLine();
+                            }
+                            else
+                            {
+                                sb.AppendLine("    FrozenLayers: (none)");
+                            }
+                        }
+                    }
+                    tr.Commit();
+                }
+
+                sb.AppendLine("\n=== [TEST_CLONE_RUN] 测试执行完成 ===");
+            }
+            catch (System.Exception ex)
+            {
+                sb.AppendLine("\n[TEST_CLONE_RUN 异常]: " + ex.Message + "\n" + ex.StackTrace);
+            }
+            finally
+            {
+                try
+                {
+                    System.IO.File.WriteAllText(logPath, sb.ToString(), System.Text.Encoding.UTF8);
+                    ed.WriteMessage("\n[TEST_CLONE_RUN] 日志已写入: " + logPath + "\n");
+                }
+                catch { }
             }
         }
     }

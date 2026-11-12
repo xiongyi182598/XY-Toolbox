@@ -301,6 +301,24 @@ namespace LayerMappingWorkbench.ViewModels
                 if (!string.IsNullOrEmpty(r.SourceLayer) && !string.IsNullOrEmpty(r.TargetLayer))
                 {
                     _masterRuleCache[r.SourceLayer] = r;
+                    if (!_availableTargetLayerNames.Contains(r.TargetLayer))
+                    {
+                        _availableTargetLayerNames.Add(r.TargetLayer);
+                    }
+                    if (!_targetLayersMeta.ContainsKey(r.TargetLayer))
+                    {
+                        LayerMetaInfo meta = new LayerMetaInfo();
+                        meta.Name = r.TargetLayer;
+                        if (!string.IsNullOrEmpty(r.TargetColorHex))
+                        {
+                            meta.Color = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                        }
+                        if (!string.IsNullOrEmpty(r.TargetLinetype))
+                        {
+                            meta.Linetype = r.TargetLinetype;
+                        }
+                        _targetLayersMeta[r.TargetLayer] = meta;
+                    }
                 }
             }
 
@@ -309,6 +327,28 @@ namespace LayerMappingWorkbench.ViewModels
             foreach (KeyValuePair<string, LayerMapRule> kv in sessionRules)
             {
                 _masterRuleCache[kv.Key] = kv.Value;
+                LayerMapRule r = kv.Value;
+                if (!string.IsNullOrEmpty(r.TargetLayer))
+                {
+                    if (!_availableTargetLayerNames.Contains(r.TargetLayer))
+                    {
+                        _availableTargetLayerNames.Add(r.TargetLayer);
+                    }
+                    if (!_targetLayersMeta.ContainsKey(r.TargetLayer))
+                    {
+                        LayerMetaInfo meta = new LayerMetaInfo();
+                        meta.Name = r.TargetLayer;
+                        if (!string.IsNullOrEmpty(r.TargetColorHex))
+                        {
+                            meta.Color = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                        }
+                        if (!string.IsNullOrEmpty(r.TargetLinetype))
+                        {
+                            meta.Linetype = r.TargetLinetype;
+                        }
+                        _targetLayersMeta[r.TargetLayer] = meta;
+                    }
+                }
             }
 
             // 4. 执行对齐流水线 (传入全量主规则缓存，确保中途 HB1/HB2 规则 100% 优先精准对齐)
@@ -431,11 +471,8 @@ namespace LayerMappingWorkbench.ViewModels
                             _availableTargetLayerNames.Add(t.Name);
                         }
 
-                        // 重新运行对齐
-                        string csvPath = LayerAlignmentEngine.GetDefaultRuleFilePath(_database.Filename);
-                        List<LayerMapRule> persistedRules = LayerAlignmentEngine.LoadRulesFromCsv(csvPath);
-
-                        _mappingList = LayerAlignmentEngine.AlignLayers(_sourceLayersMeta, _availableTargetLayerNames, _targetLayersMeta, persistedRules);
+                        // 重新运行对齐 (传入全量主规则库)
+                        _mappingList = LayerAlignmentEngine.AlignLayers(_sourceLayersMeta, _availableTargetLayerNames, _targetLayersMeta, new List<LayerMapRule>(_masterRuleCache.Values));
                         OnPropertyChanged("MappingList");
 
                         _filteredView = CollectionViewSource.GetDefaultView(_mappingList);
@@ -470,16 +507,40 @@ namespace LayerMappingWorkbench.ViewModels
                     return;
                 }
 
-                // 1. 提取导入规则中的所有目标图层，动态注入至当前可用目标图层库 (即便未加载外部DWG也能立即使用)
+                // 1. 提取导入规则中的所有目标图层，动态注入至当前可用目标图层库与元数据字典 (即便未加载外部DWG也能立即使用完整颜色线型)
                 if (_availableTargetLayerNames == null)
                 {
                     _availableTargetLayerNames = new List<string>();
                 }
+                if (_targetLayersMeta == null)
+                {
+                    _targetLayersMeta = new Dictionary<string, LayerMetaInfo>(StringComparer.OrdinalIgnoreCase);
+                }
+
                 foreach (LayerMapRule r in imported)
                 {
-                    if (!string.IsNullOrEmpty(r.TargetLayer) && !_availableTargetLayerNames.Contains(r.TargetLayer))
+                    if (!string.IsNullOrEmpty(r.TargetLayer))
                     {
-                        _availableTargetLayerNames.Add(r.TargetLayer);
+                        if (!_availableTargetLayerNames.Contains(r.TargetLayer))
+                        {
+                            _availableTargetLayerNames.Add(r.TargetLayer);
+                        }
+
+                        // 将规则中固化的目标颜色与线型动态注入目标元数据字典
+                        if (!_targetLayersMeta.ContainsKey(r.TargetLayer))
+                        {
+                            LayerMetaInfo meta = new LayerMetaInfo();
+                            meta.Name = r.TargetLayer;
+                            if (!string.IsNullOrEmpty(r.TargetColorHex))
+                            {
+                                meta.Color = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                            }
+                            if (!string.IsNullOrEmpty(r.TargetLinetype))
+                            {
+                                meta.Linetype = r.TargetLinetype;
+                            }
+                            _targetLayersMeta[r.TargetLayer] = meta;
+                        }
                     }
                 }
 
@@ -526,12 +587,23 @@ namespace LayerMappingWorkbench.ViewModels
                             itm.MatchConfidence = 100;
                             itm.MatchNote = "规则库命中 (" + Path.GetFileName(dlg.FileName) + ")";
 
-                            // 同步目标图层视觉属性 (颜色/线型)
+                            // 同步目标图层视觉属性 (颜色/线型: 优先外部DWG，其次CSV自带定义)
                             if (_targetLayersMeta != null && _targetLayersMeta.ContainsKey(hit.TargetLayer))
                             {
                                 LayerMetaInfo meta = _targetLayersMeta[hit.TargetLayer];
                                 itm.TargetColor = meta.Color;
                                 itm.TargetLinetype = meta.Linetype;
+                            }
+                            else
+                            {
+                                if (!string.IsNullOrEmpty(hit.TargetColorHex))
+                                {
+                                    itm.TargetColor = LayerAlignmentEngine.ParseColorHex(hit.TargetColorHex);
+                                }
+                                if (!string.IsNullOrEmpty(hit.TargetLinetype))
+                                {
+                                    itm.TargetLinetype = hit.TargetLinetype;
+                                }
                             }
                             updatedRows++;
                         }
@@ -547,7 +619,7 @@ namespace LayerMappingWorkbench.ViewModels
                                   "• 导入有效规则: {0} 条\n" +
                                   "• 成功对齐图层: {1} 个\n" +
                                   "• 目标标准库已同步扩充: {2} 个候选图层\n\n" +
-                                  "提示: 外部标准图层已自动填入下拉列表，可随时在表格中切换或微调！",
+                                  "提示: 外部标准图层与其标准颜色/线型已自动恢复并填入，可随时切换微调！",
                                   imported.Count, updatedRows, _availableTargetLayerNames.Count),
                     "导入成功", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             }
@@ -562,14 +634,21 @@ namespace LayerMappingWorkbench.ViewModels
 
             if (dlg.ShowDialog() == DialogResult.OK)
             {
-                // 将当前界面中配置好的所有有效映射沉淀合并至主规则库
+                // 将当前界面中配置好的所有有效映射沉淀合并至主规则库 (含目标色与目标线型)
                 if (_mappingList != null)
                 {
                     foreach (LayerCompareItem itm in _mappingList)
                     {
                         if (!string.IsNullOrEmpty(itm.SelectedTargetLayerName))
                         {
-                            _masterRuleCache[itm.SourceLayerName] = new LayerMapRule(itm.SourceLayerName, itm.SelectedTargetLayerName, ForceByLayer);
+                            string hexColor = LayerAlignmentEngine.ColorToHex(itm.TargetColor);
+                            string lt = string.IsNullOrEmpty(itm.TargetLinetype) ? "Continuous" : itm.TargetLinetype;
+                            _masterRuleCache[itm.SourceLayerName] = new LayerMapRule(
+                                itm.SourceLayerName,
+                                itm.SelectedTargetLayerName,
+                                ForceByLayer,
+                                hexColor,
+                                lt);
                         }
                     }
                 }
@@ -583,6 +662,7 @@ namespace LayerMappingWorkbench.ViewModels
                         string.Format("规则库导出成功！\n\n" +
                                       "• 保存路径: {0}\n" +
                                       "• 规则总数: {1} 条 (包含历史沉淀与当前图纸配置)\n" +
+                                      "• 包含属性: 源图层、目标图层、强制随层、目标色HEX、目标线型\n" +
                                       "• 文件格式: UTF-8 带BOM (中文标准格式)\n\n" +
                                       "支持在 Microsoft Excel 或 WPS 中直接双击打开编辑维护，绝不乱码！",
                                       dlg.FileName, rulesToExport.Count),
@@ -598,7 +678,9 @@ namespace LayerMappingWorkbench.ViewModels
             {
                 if (item.IsSelected && !string.IsNullOrEmpty(item.SelectedTargetLayerName))
                 {
-                    LayerMapRule r = new LayerMapRule(item.SourceLayerName, item.SelectedTargetLayerName, ForceByLayer);
+                    string hexColor = LayerAlignmentEngine.ColorToHex(item.TargetColor);
+                    string lt = string.IsNullOrEmpty(item.TargetLinetype) ? "Continuous" : item.TargetLinetype;
+                    LayerMapRule r = new LayerMapRule(item.SourceLayerName, item.SelectedTargetLayerName, ForceByLayer, hexColor, lt);
                     activeRules.Add(r);
                     _masterRuleCache[item.SourceLayerName] = r;
                 }

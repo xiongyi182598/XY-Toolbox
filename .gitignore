@@ -12,6 +12,7 @@ XY_Toolbox_*.dll
 # IDE 与操作系统临时文件
 .vs/
 .idea/
+packages/
 Thumbs.db
 Desktop.ini
 

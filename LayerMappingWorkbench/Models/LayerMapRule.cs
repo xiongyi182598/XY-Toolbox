@@ -21,6 +21,9 @@ namespace LayerMappingWorkbench.Models
         public bool KeepZeroLayer { get; set; }
         public bool PurgeSource { get; set; }
 
+        public string TargetColorHex { get; set; }
+        public string TargetLinetype { get; set; }
+
         public LayerMapRule()
         {
             SourceLayer = string.Empty;
@@ -28,6 +31,8 @@ namespace LayerMappingWorkbench.Models
             ForceByLayer = true;
             KeepZeroLayer = true;
             PurgeSource = true;
+            TargetColorHex = string.Empty;
+            TargetLinetype = "Continuous";
         }
 
         public LayerMapRule(string source, string target, bool forceByLayer)
@@ -37,6 +42,19 @@ namespace LayerMappingWorkbench.Models
             ForceByLayer = forceByLayer;
             KeepZeroLayer = true;
             PurgeSource = true;
+            TargetColorHex = string.Empty;
+            TargetLinetype = "Continuous";
+        }
+
+        public LayerMapRule(string source, string target, bool forceByLayer, string targetColorHex, string targetLinetype)
+        {
+            SourceLayer = source ?? string.Empty;
+            TargetLayer = target ?? string.Empty;
+            ForceByLayer = forceByLayer;
+            KeepZeroLayer = true;
+            PurgeSource = true;
+            TargetColorHex = targetColorHex ?? string.Empty;
+            TargetLinetype = string.IsNullOrEmpty(targetLinetype) ? "Continuous" : targetLinetype;
         }
     }
 }

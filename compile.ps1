@@ -1,5 +1,9 @@
 $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$PSScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $PSScriptDir) { $PSScriptDir = (Get-Location).Path }
+
 $candidateDirs = @(
+    "$PSScriptDir\packages\acad2018",
     'D:\AUTO-CAD2024\AutoCAD 2024',
     'C:\Program Files\Autodesk\AutoCAD 2024',
     'D:\Program Files\Autodesk\AutoCAD 2024'
@@ -15,7 +19,7 @@ if (-not $acadDir) {
     Write-Host "AutoCAD dependency directory not found!" -ForegroundColor Red
     exit 1
 }
-Write-Host "Using AutoCAD directory: $acadDir"
+Write-Host "Using AutoCAD reference directory: $acadDir"
 
 $refs = @(
     "/reference:$acadDir\accoremgd.dll",
@@ -55,7 +59,7 @@ $sources = @(
     "LayerMappingWorkbench\Commands\ExtensionCommands.cs"
 )
 
-$argsList = @("/target:library", "/platform:x64", "/out:XY_Toolbox.dll") + $refs + $sources
+$argsList = @("/target:library", "/platform:x64", "/codepage:65001", "/out:XY_Toolbox.dll") + $refs + $sources
 
 Write-Host "Compiling XY_Toolbox.dll..."
 & $csc $argsList

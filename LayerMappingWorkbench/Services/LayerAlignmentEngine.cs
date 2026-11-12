@@ -233,8 +233,22 @@ namespace LayerMappingWorkbench.Services
                     item.SelectedTargetLayerName = hitRule.TargetLayer;
                     matchedTargets.Add(hitRule.TargetLayer);
 
-                    // 补全目标图层外观属性
-                    ApplyTargetVisualProps(item, hitRule.TargetLayer, targetLayerMap);
+                    // 补全目标图层外观属性 (优先使用外部 DWG 的元数据，若无外部 DWG 则使用规则库中固化的目标色与线型)
+                    if (targetLayerMap != null && targetLayerMap.ContainsKey(hitRule.TargetLayer))
+                    {
+                        ApplyTargetVisualProps(item, hitRule.TargetLayer, targetLayerMap);
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrEmpty(hitRule.TargetColorHex))
+                        {
+                            item.TargetColor = ParseColorHex(hitRule.TargetColorHex);
+                        }
+                        if (!string.IsNullOrEmpty(hitRule.TargetLinetype))
+                        {
+                            item.TargetLinetype = hitRule.TargetLinetype;
+                        }
+                    }
                     result.Add(item);
                     continue;
                 }
@@ -294,6 +308,29 @@ namespace LayerMappingWorkbench.Services
             }
 
             return result;
+        }
+
+        public static System.Windows.Media.Color ParseColorHex(string hex)
+        {
+            if (string.IsNullOrEmpty(hex)) return System.Windows.Media.Colors.White;
+            hex = hex.Trim().TrimStart('#');
+            if (hex.Length == 6)
+            {
+                try
+                {
+                    byte r = Convert.ToByte(hex.Substring(0, 2), 16);
+                    byte g = Convert.ToByte(hex.Substring(2, 2), 16);
+                    byte b = Convert.ToByte(hex.Substring(4, 2), 16);
+                    return System.Windows.Media.Color.FromRgb(r, g, b);
+                }
+                catch { }
+            }
+            return System.Windows.Media.Colors.White;
+        }
+
+        public static string ColorToHex(System.Windows.Media.Color color)
+        {
+            return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
         }
 
         private static void ApplyTargetVisualProps(LayerCompareItem item, string targetName, Dictionary<string, LayerMetaInfo> targetMap)
@@ -453,6 +490,31 @@ namespace LayerMappingWorkbench.Services
             {
                 LayerMapRule rule = new LayerMapRule(srcLayer, tarLayer, forceByLayer);
 
+                // 若当前数据库中存在目标图层，捕获其真实颜色与线型
+                if (db != null)
+                {
+                    try
+                    {
+                        using (Transaction tr = db.TransactionManager.StartTransaction())
+                        {
+                            LayerTable lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                            if (lt.Has(tarLayer))
+                            {
+                                LayerTableRecord ltr = (LayerTableRecord)tr.GetObject(lt[tarLayer], OpenMode.ForRead);
+                                System.Drawing.Color dwgColor = ltr.Color.ColorValue;
+                                rule.TargetColorHex = string.Format("#{0:X2}{1:X2}{2:X2}", dwgColor.R, dwgColor.G, dwgColor.B);
+                                if (ltr.LinetypeObjectId != ObjectId.Null)
+                                {
+                                    LinetypeTableRecord ltrLt = (LinetypeTableRecord)tr.GetObject(ltr.LinetypeObjectId, OpenMode.ForRead);
+                                    rule.TargetLinetype = ltrLt.Name;
+                                }
+                            }
+                            tr.Commit();
+                        }
+                    }
+                    catch { }
+                }
+
                 // 1. 记录到本次 CAD 会话工作流缓存中
                 lock (_sessionCumulativeRules)
                 {
@@ -470,6 +532,19 @@ namespace LayerMappingWorkbench.Services
                     if (!string.IsNullOrEmpty(r.SourceLayer) && !string.IsNullOrEmpty(r.TargetLayer))
                     {
                         diskMap[r.SourceLayer] = r;
+                    }
+                }
+                LayerMapRule oldRule;
+                if (diskMap.TryGetValue(srcLayer, out oldRule))
+                {
+                    if (string.IsNullOrEmpty(rule.TargetColorHex) && !string.IsNullOrEmpty(oldRule.TargetColorHex))
+                    {
+                        rule.TargetColorHex = oldRule.TargetColorHex;
+                    }
+                    if ((string.IsNullOrEmpty(rule.TargetLinetype) || rule.TargetLinetype == "Continuous") &&
+                        !string.IsNullOrEmpty(oldRule.TargetLinetype))
+                    {
+                        rule.TargetLinetype = oldRule.TargetLinetype;
                     }
                 }
                 diskMap[srcLayer] = rule;
@@ -546,6 +621,16 @@ namespace LayerMappingWorkbench.Services
                         {
                             rule.ForceByLayer = true;
                         }
+                    }
+
+                    if (parts.Count >= 4)
+                    {
+                        rule.TargetColorHex = CleanCsvField(parts[3]);
+                    }
+
+                    if (parts.Count >= 5)
+                    {
+                        rule.TargetLinetype = CleanCsvField(parts[4]);
                     }
 
                     rules.Add(rule);
@@ -711,14 +796,16 @@ namespace LayerMappingWorkbench.Services
             {
                 StringBuilder sb = new StringBuilder();
                 sb.AppendLine("# XY-Toolbox 施工图图层映射规则字典 (支持在 Excel/WPS 中直接编辑维护)");
-                sb.AppendLine("SourceLayer(源图层),TargetLayer(目标标准图层),ForceByLayer(强制颜色线型随层)");
+                sb.AppendLine("SourceLayer(源图层),TargetLayer(目标标准图层),ForceByLayer(强制颜色线型随层),TargetColor(目标色HEX),TargetLinetype(目标线型)");
 
                 foreach (LayerMapRule r in rules)
                 {
                     if (string.IsNullOrEmpty(r.SourceLayer) || string.IsNullOrEmpty(r.TargetLayer)) continue;
                     string src = EscapeCsvField(r.SourceLayer);
                     string tgt = EscapeCsvField(r.TargetLayer);
-                    sb.AppendLine(string.Format("{0},{1},{2}", src, tgt, r.ForceByLayer));
+                    string colHex = EscapeCsvField(r.TargetColorHex ?? string.Empty);
+                    string ltName = EscapeCsvField(string.IsNullOrEmpty(r.TargetLinetype) ? "Continuous" : r.TargetLinetype);
+                    sb.AppendLine(string.Format("{0},{1},{2},{3},{4}", src, tgt, r.ForceByLayer, colHex, ltName));
                 }
 
                 // 强制附带 UTF-8 BOM (\uFEFF)，确保双击在 Excel/WPS 打开时中文 100% 绝不乱码

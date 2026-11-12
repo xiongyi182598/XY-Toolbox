@@ -40,7 +40,7 @@ token = token.strip('\x00').strip()
 
 print(f'[+] 读取 GitHub 认证成功，用户: {pcred.contents.UserName}')
 
-proxy_handler = urllib.request.ProxyHandler({'http': 'socks5h://127.0.0.1:10808', 'https': 'socks5h://127.0.0.1:10808'})
+proxy_handler = urllib.request.ProxyHandler({'http': 'http://127.0.0.1:10808', 'https': 'http://127.0.0.1:10808'})
 opener = urllib.request.build_opener(proxy_handler)
 
 REPO = "xiongyi182598/XY-Toolbox"

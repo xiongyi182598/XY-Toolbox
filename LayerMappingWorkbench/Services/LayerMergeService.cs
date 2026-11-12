@@ -231,6 +231,22 @@ namespace LayerMappingWorkbench.Services
                 LayerMetaInfo def = null;
                 bool hasDef = targetLayerDefs != null && targetLayerDefs.TryGetValue(targetName, out def);
 
+                // 若外部 DWG 未定义此层，但映射规则自带了固化色彩/线型，智能构造标准元数据定义
+                if ((!hasDef || def == null) && (!string.IsNullOrEmpty(kv.Value.TargetColorHex) || !string.IsNullOrEmpty(kv.Value.TargetLinetype)))
+                {
+                    def = new LayerMetaInfo();
+                    def.Name = targetName;
+                    if (!string.IsNullOrEmpty(kv.Value.TargetColorHex))
+                    {
+                        def.Color = LayerAlignmentEngine.ParseColorHex(kv.Value.TargetColorHex);
+                    }
+                    if (!string.IsNullOrEmpty(kv.Value.TargetLinetype))
+                    {
+                        def.Linetype = kv.Value.TargetLinetype;
+                    }
+                    hasDef = true;
+                }
+
                 if (!lt.Has(targetName))
                 {
                     // ---- 目标图层不存在：新建并赋予标准颜色与线型 ----
