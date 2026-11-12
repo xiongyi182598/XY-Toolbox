@@ -1,4 +1,4 @@
-﻿;; ========================================================
+;; ========================================================
 ;; XY������ȫ���Զ������� (autoload.lsp)
 ;; ������: ԭ�� AutoCAD (2020-2026) / �콨 (T20/T30 ȫϵ) / ��������
 ;; ========================================================
@@ -1736,3 +1736,15 @@
 (defun c:xgx () (c:XGX))
 (defun c:UPDATE () (c:XGX))
 (defun c:update () (c:XGX))
+
+;; --- 智能文字选择与批量过滤 (XTX / XSW / XTXD / XTXH / XTXC) ---
+(defun c:XTX () (vl-cmdf "_.XTX") (princ))
+(defun c:xtx () (c:XTX))
+(defun c:XSW () (vl-cmdf "_.XSW") (princ))
+(defun c:xsw () (c:XSW))
+(defun c:XTXD () (vl-cmdf "_.XTXD") (princ))
+(defun c:xtxd () (c:XTXD))
+(defun c:XTXH () (vl-cmdf "_.XTXH") (princ))
+(defun c:xtxh () (c:XTXH))
+(defun c:XTXC () (vl-cmdf "_.XTXC") (princ))
+(defun c:xtxc () (c:XTXC))

@@ -4694,8 +4694,14 @@ namespace XY_Deepening_Toolbox
                 () => Commands.ShowViewportCloneCommand());
             RegisterSection(sec1);
 
-            // 分类 2: 图块工具 (默认展开，方便直观查看)
-            CategorySection sec2 = CreateCategorySection("图块工具", 5, true);
+            // 分类 2: 图块与文字工具 (默认展开，方便直观查看)
+            CategorySection sec2 = CreateCategorySection("图块与文字", 7, true);
+            AddItemRowToSection(sec2, "🎯", "文字吸选", "XTX", 
+                "智能文字选择 (XTX / XSW)\n吸管点选参考文字，按字高容差/字体样式/颜色随层极速筛选选中并置入夹点", 
+                () => SendCadCommand("XTX "));
+            AddItemRowToSection(sec2, "🎛️", "文字看板", "XTXD", 
+                "文字过滤看板 (XTXD / XY_TEXTFILTER)\n深色交互看板：多条件组合过滤/随层穿透/仅隔离显示/批量改字高样式颜色", 
+                () => SendCadCommand("XTXD "));
             AddItemRowToSection(sec2, "✂️", "穿透删除", "KSC", 
                 "穿透删除 (KSC)\n免炸开直接点选或框选穿透删除块内图元，按 M 键自由切换【同名块全部联动】或【仅改当前(独占)】模式 (别名: XSC, BDE)", 
                 () => SendCadCommand("KSC "));

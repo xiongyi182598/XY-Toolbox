@@ -56,7 +56,11 @@ $sources = @(
     "LayerMappingWorkbench\ViewModels\LayerMappingViewModel.cs",
     "LayerMappingWorkbench\Views\LayerMappingView.cs",
     "LayerMappingWorkbench\Views\ViewportCloneDialog.cs",
-    "LayerMappingWorkbench\Commands\ExtensionCommands.cs"
+    "LayerMappingWorkbench\Commands\ExtensionCommands.cs",
+    "TextFilterWorkbench\Models\TextFilterCriteria.cs",
+    "TextFilterWorkbench\Services\TextFilterService.cs",
+    "TextFilterWorkbench\Views\TextFilterDialog.cs",
+    "TextFilterWorkbench\Commands\TextFilterCommands.cs"
 )
 
 $argsList = @("/target:library", "/platform:x64", "/codepage:65001", "/out:XY_Toolbox.dll") + $refs + $sources
