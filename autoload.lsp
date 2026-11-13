@@ -122,29 +122,33 @@
   (if (/= num-str "") (atoi num-str) 0)
 )
 
-(defun xy:load-latest-dll ( / dir all-files best-dll best-ver f v target-path cache-dir )
-  (if (or (not *XY-TOOLBOX-LOADED*) (and *CURRENT-LOADED-VER* (> best-ver *CURRENT-LOADED-VER*)))
+(defun xy:load-latest-dll ( / dir all-files best-dll best-ver f v target-path )
+  ;; 先扫描目录，计算出 best-ver，再决定是否需要 netload
+  (setq dir (xy:get-toolbox-dir))
+  (if (and dir (/= dir ""))
     (progn
-      (setq dir (xy:get-toolbox-dir))
-      (if (and dir (/= dir ""))
-        (progn
-          ;; 1. ɨ�����к�ѡ DLL ��ѡ���汾�����
-          (setq all-files (vl-directory-files dir "XY_Toolbox*.dll" 1))
-          (setq best-dll nil best-ver -1)
-          (foreach f all-files
-            (if (not (vl-string-search "run" (strcase f)))
-              (progn
-                (setq v (xy:extract-dll-ver f))
-                (if (> v best-ver)
-                  (setq best-ver v best-dll f)
-                )
-              )
+      ;; 1. 扫描所有 DLL，选出版本号最大的
+      (setq all-files (vl-directory-files dir "XY_Toolbox*.dll" 1))
+      (setq best-dll nil best-ver -1)
+      (foreach f all-files
+        (if (not (vl-string-search "run" (strcase f)))
+          (progn
+            (setq v (xy:extract-dll-ver f))
+            (if (> v best-ver)
+              (setq best-ver v best-dll f)
             )
           )
-          (if (not best-dll) (setq best-dll "XY_Toolbox.dll"))
-          (setq target-path (strcat dir "/" best-dll))
+        )
+      )
+      (if (not best-dll) (setq best-dll "XY_Toolbox.dll"))
+      (setq target-path (strcat dir "/" best-dll))
 
-          ;; 2. �����´��� DLL ���������ļ�δ��������ͬ��ĸ���ļ�
+      ;; 2. 仅在未加载 或 发现更新版本时才执行 netload
+      (if (or (not *XY-TOOLBOX-LOADED*)
+              (not *CURRENT-LOADED-VER*)
+              (> best-ver *CURRENT-LOADED-VER*))
+        (progn
+          ;; 同步覆盖 XY_Toolbox.dll
           (if (and (/= best-dll "XY_Toolbox.dll") (findfile (strcat dir "/" best-dll)))
             (vl-catch-all-apply
               '(lambda ()
@@ -156,7 +160,7 @@
             )
           )
 
-          ;; 3. ִ�� netload �������
+          ;; 3. 执行 netload 加载最新 DLL
           (if (findfile target-path)
             (progn
               (setq target-path (vl-string-translate "\\" "/" target-path))
@@ -165,8 +169,9 @@
               )
               (setq *XY-TOOLBOX-LOADED* t)
               (setq *CURRENT-LOADED-VER* best-ver)
+              (princ (strcat "\n[XY工具箱] 已成功热重载最新核心: " best-dll "\n"))
 
-              ;; 4. ��Ĭ������ʷ�ɰ汾�ļ�
+              ;; 4. 清理旧版本历史 DLL
               (foreach f all-files
                 (if (and (/= f best-dll) (/= f "XY_Toolbox.dll"))
                   (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" f)))
@@ -1699,7 +1704,9 @@
       (if apply_all_toolbox_shortcuts
         (apply_all_toolbox_shortcuts)
       )
-      ;; ��ȫ���� C# ����̨���ˢ�£�������Ѵ�����
+      ;; 重置版本号，强制触发 netload 加载最新 DLL
+      (setq *CURRENT-LOADED-VER* 0)
+      (setq *XY-TOOLBOX-LOADED* nil)
       (vl-catch-all-apply 'xy:load-latest-dll)
       (vl-catch-all-apply 'vl-cmdf (list "XY_UPDATE_PANEL"))
       (princ "\n========================================================\n")

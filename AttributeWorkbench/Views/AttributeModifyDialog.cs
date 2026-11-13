@@ -358,8 +358,15 @@ namespace AttributeWorkbench.Views
             }
             else
             {
-                _borderMultiPart.Visibility = Visibility.Collapsed;
+                _borderMultiPart.Visibility = Visibility.Visible;
+                _txtPartCountBadge.Text = "单段独立编号";
+                _txtMultiPartPreview.Text = string.Format("当前编号为完整单段文字: '{0}'，字高与位置调整即时生效，无需排版合并。", _target.TextString);
                 _txtAttrDetail.Text = string.Format("当前文字内容: \"{0}\" | 当前基准字高: {1:0.###}", _target.TextString, _target.CurrentHeight);
+                _radScheme1.IsEnabled = false;
+                _radScheme2.IsEnabled = false;
+                _chkAutoApplyOnHeightChange.IsEnabled = false;
+                _btnApplyScheme.IsEnabled = false;
+                _btnApplyScheme.Content = "⚠ 单段编号无需排版";
             }
         }
 
