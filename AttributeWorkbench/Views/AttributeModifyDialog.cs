@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
@@ -20,7 +21,7 @@ namespace AttributeWorkbench.Views
 @"<Window xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
         xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml""
         Title=""🔤 图块属性修改 (XY-Toolbox)""
-        Width=""480"" Height=""520"" MinWidth=""440"" MinHeight=""480""
+        Width=""500"" Height=""650"" MinWidth=""460"" MinHeight=""560""
         WindowStartupLocation=""CenterScreen""
         Background=""#1E222A"" Foreground=""#ECEFF4""
         FontFamily=""Segoe UI, Microsoft YaHei, 微软雅黑"" FontSize=""12""
@@ -65,19 +66,26 @@ namespace AttributeWorkbench.Views
             <Setter Property=""VerticalContentAlignment"" Value=""Center""/>
             <Setter Property=""Cursor"" Value=""Hand""/>
         </Style>
+
+        <Style TargetType=""CheckBox"">
+            <Setter Property=""Foreground"" Value=""#ECEFF4""/>
+            <Setter Property=""VerticalContentAlignment"" Value=""Center""/>
+            <Setter Property=""Cursor"" Value=""Hand""/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin=""16"">
         <Grid.RowDefinitions>
             <RowDefinition Height=""Auto""/> <!-- 0: 顶部信息卡 -->
             <RowDefinition Height=""Auto""/> <!-- 1: 字高修改区 -->
-            <RowDefinition Height=""Auto""/> <!-- 2: 位置平移区 -->
-            <RowDefinition Height=""Auto""/> <!-- 3: 同步范围 -->
-            <RowDefinition Height=""*""/>    <!-- 4: 底部操作 -->
+            <RowDefinition Height=""Auto""/> <!-- 2: 门窗复合编号排版 (防分散) -->
+            <RowDefinition Height=""Auto""/> <!-- 3: 位置平移区 -->
+            <RowDefinition Height=""Auto""/> <!-- 4: 同步范围 -->
+            <RowDefinition Height=""*""/>    <!-- 5: 底部操作 -->
         </Grid.RowDefinitions>
 
         <!-- 0. 顶部属性信息卡 -->
-        <Border Grid.Row=""0"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,12"">
+        <Border Grid.Row=""0"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,10"">
             <StackPanel>
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -89,18 +97,18 @@ namespace AttributeWorkbench.Views
                         <TextBlock Text=""XY-Toolbox 属性修改"" FontSize=""10"" Foreground=""#A3BE8C""/>
                     </Border>
                 </Grid>
-                <TextBlock x:Name=""txtAttrDetail"" Text=""当前内容: 'M01' | 当前字高: 250.0"" FontSize=""11"" Foreground=""#D8DEE9"" Margin=""0,6,0,0""/>
+                <TextBlock x:Name=""txtAttrDetail"" Text=""当前内容: 'M01' | 当前字高: 250.0"" FontSize=""11"" Foreground=""#D8DEE9"" Margin=""0,5,0,0""/>
             </StackPanel>
         </Border>
 
         <!-- 1. 字高可视化调节卡片 -->
-        <Border Grid.Row=""1"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,12"">
+        <Border Grid.Row=""1"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,10"">
             <StackPanel>
-                <TextBlock Text=""📏 属性字高调节 (Text Height):"" FontWeight=""Bold"" Foreground=""#ECEFF4"" Margin=""0,0,0,8""/>
+                <TextBlock Text=""📏 属性字高调节 (Text Height):"" FontWeight=""Bold"" Foreground=""#ECEFF4"" Margin=""0,0,0,6""/>
 
                 <!-- 常用规格胶囊按钮 -->
                 <TextBlock Text=""常用工程规格一键设置:"" FontSize=""11"" Foreground=""#9AA5B8"" Margin=""0,0,0,4""/>
-                <UniformGrid Columns=""6"" Margin=""0,0,0,8"">
+                <UniformGrid Columns=""6"" Margin=""0,0,0,6"">
                     <Button x:Name=""btnH150"" Content=""150"" Margin=""2"" Background=""#3B4252""/>
                     <Button x:Name=""btnH200"" Content=""200"" Margin=""2"" Background=""#3B4252""/>
                     <Button x:Name=""btnH250"" Content=""250"" Margin=""2"" Background=""#3B4252""/>
@@ -110,7 +118,7 @@ namespace AttributeWorkbench.Views
                 </UniformGrid>
 
                 <!-- 精确微调栏 -->
-                <Grid Margin=""0,4,0,0"">
+                <Grid Margin=""0,2,0,0"">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width=""Auto""/>
                         <ColumnDefinition Width=""6""/>
@@ -130,13 +138,43 @@ namespace AttributeWorkbench.Views
                     <Button x:Name=""btnScaleUp"" Content=""1.25x"" Grid.Column=""8"" Padding=""8,3"" ToolTip=""按1.25倍放大""/>
                 </Grid>
 
-                <TextBlock Text=""💡 提示：字高缩放将自动锁死文字中心，门编号等文字在圆圈/门框内对称缩放不跑偏""
-                           FontSize=""10"" Foreground=""#6B7A94"" Margin=""0,8,0,0""/>
+                <TextBlock Text=""💡 提示：字高缩放自动锁死对齐中心，门编号等文字在圆圈/门框内对称缩放不跑偏""
+                           FontSize=""10"" Foreground=""#6B7A94"" Margin=""0,6,0,0""/>
             </StackPanel>
         </Border>
 
-        <!-- 2. 位置平移区 -->
-        <Border Grid.Row=""2"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,12"">
+        <!-- 2. 门窗多段复合编号排版专区 (针对 FM 乙 1023 分散现象) -->
+        <Border x:Name=""borderMultiPart"" Grid.Row=""2"" Background=""#262B35"" BorderBrush=""#4C566A"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,10"">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width=""*""/>
+                        <ColumnDefinition Width=""Auto""/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name=""txtMultiPartHeader"" Text=""🔗 门窗复合编号排版 (彻底防文字分散):"" FontWeight=""Bold"" Foreground=""#EBCB8B""/>
+                    <Border Grid.Column=""1"" Background=""#434C5E"" CornerRadius=""3"" Padding=""6,1"">
+                        <TextBlock x:Name=""txtPartCountBadge"" Text=""检测到 3 个部件"" FontSize=""10"" Foreground=""#88C0D0""/>
+                    </Border>
+                </Grid>
+                <TextBlock x:Name=""txtMultiPartPreview"" Text=""各部件: FM + 乙 + 1023 ➔ 方案1合并预览: 'FM乙1023'"" FontSize=""11"" Foreground=""#D8DEE9"" Margin=""0,4,0,6""/>
+
+                <!-- 方案切换 -->
+                <RadioButton x:Name=""radScheme1"" Content=""方案 1: 合并为单段完整编号 (如 FM乙1023，彻底杜绝分散，默认推荐)"" IsChecked=""True"" Foreground=""#ECEFF4"" Margin=""0,2,0,3""/>
+                <RadioButton x:Name=""radScheme2"" Content=""方案 2: 保持分段并智能紧凑重排 (按字高自动紧密贴合间距)"" Foreground=""#D8DEE9"" Margin=""0,0,0,6""/>
+
+                <Grid Margin=""0,2,0,0"">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width=""*""/>
+                        <ColumnDefinition Width=""Auto""/>
+                    </Grid.ColumnDefinitions>
+                    <CheckBox x:Name=""chkAutoApplyOnHeightChange"" Content=""调节字高时自动应用该方案"" IsChecked=""True"" Foreground=""#88C0D0"" VerticalAlignment=""Center""/>
+                    <Button x:Name=""btnApplyScheme"" Grid.Column=""1"" Content=""⚡ 立即执行排版/合并"" Background=""#4C566A"" Foreground=""#FFFFFF"" FontWeight=""Bold"" Padding=""12,4""/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 3. 位置平移区 -->
+        <Border Grid.Row=""3"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""12"" Margin=""0,0,0,10"">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width=""*""/>
@@ -144,24 +182,24 @@ namespace AttributeWorkbench.Views
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column=""0"" VerticalAlignment=""Center"">
                     <TextBlock Text=""↔️ 属性文字位置调整:"" FontWeight=""Bold"" Foreground=""#ECEFF4""/>
-                    <TextBlock Text=""在 CAD 中动态拖拽橡皮筋实时对齐"" FontSize=""11"" Foreground=""#9AA5B8"" Margin=""0,2,0,0""/>
+                    <TextBlock Text=""编号所有部件整体动态拖拽平移，绝不错位"" FontSize=""11"" Foreground=""#9AA5B8"" Margin=""0,2,0,0""/>
                 </StackPanel>
                 <Button x:Name=""btnStartMoveJig"" Grid.Column=""1"" Content=""🎯 拖拽平移位置"" Background=""#5E81AC"" Foreground=""#FFFFFF""
                         FontWeight=""Bold"" Padding=""14,8""/>
             </Grid>
         </Border>
 
-        <!-- 3. 同步范围 -->
-        <Border Grid.Row=""3"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""10,8"" Margin=""0,0,0,12"">
+        <!-- 4. 同步范围 (单图块调整 vs 多图块同步) -->
+        <Border Grid.Row=""4"" Background=""#262B35"" BorderBrush=""#3B4252"" BorderThickness=""1"" CornerRadius=""6"" Padding=""10,8"" Margin=""0,0,0,12"">
             <StackPanel Orientation=""Horizontal"" VerticalAlignment=""Center"">
-                <TextBlock Text=""同步范围: "" FontWeight=""Bold"" Foreground=""#88C0D0"" Margin=""0,0,10,0"" VerticalAlignment=""Center""/>
-                <RadioButton x:Name=""radSyncAll"" Content=""同步全图所有同名块 (模型+所有布局)"" IsChecked=""True"" Margin=""0,0,14,0""/>
-                <RadioButton x:Name=""radSyncSingle"" Content=""仅改当前这 1 处""/>
+                <TextBlock Text=""联动范围: "" FontWeight=""Bold"" Foreground=""#88C0D0"" Margin=""0,0,10,0"" VerticalAlignment=""Center""/>
+                <RadioButton x:Name=""radSyncAll"" Content=""多图块同步 (全图同名块同名编号联动)"" IsChecked=""True"" Margin=""0,0,14,0""/>
+                <RadioButton x:Name=""radSyncSingle"" Content=""仅当前单图块调整 (其他图块不动)""/>
             </StackPanel>
         </Border>
 
-        <!-- 4. 底部主操作按钮 -->
-        <Grid Grid.Row=""4"" VerticalAlignment=""Bottom"">
+        <!-- 5. 底部主操作按钮 -->
+        <Grid Grid.Row=""5"" VerticalAlignment=""Bottom"">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width=""*""/>
                 <ColumnDefinition Width=""8""/>
@@ -200,6 +238,15 @@ namespace AttributeWorkbench.Views
         private Button _btnPlus25;
         private Button _btnScaleDown;
         private Button _btnScaleUp;
+
+        // 复合编号部件排版控件
+        private Border _borderMultiPart;
+        private TextBlock _txtPartCountBadge;
+        private TextBlock _txtMultiPartPreview;
+        private RadioButton _radScheme1;
+        private RadioButton _radScheme2;
+        private CheckBox _chkAutoApplyOnHeightChange;
+        private Button _btnApplyScheme;
 
         private Button _btnStartMoveJig;
         private RadioButton _radSyncAll;
@@ -245,6 +292,14 @@ namespace AttributeWorkbench.Views
             _btnScaleDown = (Button)_window.FindName("btnScaleDown");
             _btnScaleUp = (Button)_window.FindName("btnScaleUp");
 
+            _borderMultiPart = (Border)_window.FindName("borderMultiPart");
+            _txtPartCountBadge = (TextBlock)_window.FindName("txtPartCountBadge");
+            _txtMultiPartPreview = (TextBlock)_window.FindName("txtMultiPartPreview");
+            _radScheme1 = (RadioButton)_window.FindName("radScheme1");
+            _radScheme2 = (RadioButton)_window.FindName("radScheme2");
+            _chkAutoApplyOnHeightChange = (CheckBox)_window.FindName("chkAutoApplyOnHeightChange");
+            _btnApplyScheme = (Button)_window.FindName("btnApplyScheme");
+
             _btnStartMoveJig = (Button)_window.FindName("btnStartMoveJig");
             _radSyncAll = (RadioButton)_window.FindName("radSyncAll");
             _radSyncSingle = (RadioButton)_window.FindName("radSyncSingle");
@@ -267,7 +322,8 @@ namespace AttributeWorkbench.Views
             _btnScaleDown.Click += delegate { MultiplyHeightByFactor(0.8); };
             _btnScaleUp.Click += delegate { MultiplyHeightByFactor(1.25); };
 
-            // 操作绑定
+            // 方案排版与操作绑定
+            _btnApplyScheme.Click += delegate { ExecuteMultiPartScheme(); };
             _btnApplyHeight.Click += delegate { ApplyInputHeight(); };
             _btnStartMoveJig.Click += BtnStartMoveJig_Click;
             _btnPickNext.Click += BtnPickNext_Click;
@@ -284,8 +340,27 @@ namespace AttributeWorkbench.Views
         {
             if (_target == null) return;
             _txtBlockTitle.Text = string.Format("图块: 【{0}】 | 标签: 【{1}】", _target.BlockName, _target.Tag);
-            _txtAttrDetail.Text = string.Format("当前文字内容: \"{0}\" | 当前基准字高: {1:0.###}", _target.TextString, _target.CurrentHeight);
             _txtNewHeight.Text = _target.CurrentHeight.ToString("0.###");
+
+            if (_target.HasMultipleParts)
+            {
+                _borderMultiPart.Visibility = Visibility.Visible;
+                _txtPartCountBadge.Text = string.Format("检测到 {0} 个部件", _target.RelatedParts.Count);
+
+                List<string> partTags = new List<string>();
+                foreach (AttributePartInfo p in _target.RelatedParts)
+                {
+                    partTags.Add(p.TextString);
+                }
+                string partsSummary = string.Join(" + ", partTags.ToArray());
+                _txtMultiPartPreview.Text = string.Format("各部件: {0} ➔ 方案1合并预览: '{1}'", partsSummary, _target.CombinedText);
+                _txtAttrDetail.Text = string.Format("复合门窗编号: \"{0}\" | 当前基准字高: {1:0.###}", _target.CombinedText, _target.CurrentHeight);
+            }
+            else
+            {
+                _borderMultiPart.Visibility = Visibility.Collapsed;
+                _txtAttrDetail.Text = string.Format("当前文字内容: \"{0}\" | 当前基准字高: {1:0.###}", _target.TextString, _target.CurrentHeight);
+            }
         }
 
         private void AdjustHeightByDelta(double delta)
@@ -332,17 +407,70 @@ namespace AttributeWorkbench.Views
                 using (_doc.LockDocument())
                 {
                     count = AttributeModifyService.ModifyAttributeHeight(_doc.Database, _target, newH, syncAll);
+
+                    // 如果勾选了自动排版，且存在多部件，联动执行方案1或方案2
+                    if (_chkAutoApplyOnHeightChange.IsChecked == true && _target.HasMultipleParts)
+                    {
+                        if (_radScheme1.IsChecked == true)
+                        {
+                            AttributeModifyService.MergeMultiPartAttributes(_doc.Database, _target, syncAll);
+                        }
+                        else
+                        {
+                            AttributeModifyService.CompactMultiPartAttributes(_doc.Database, _target, newH, syncAll);
+                        }
+                    }
                 }
 
                 _txtNewHeight.Text = newH.ToString("0.###");
-                _txtAttrDetail.Text = string.Format("当前文字内容: \"{0}\" | 当前字高: {1:0.###} (已更新)", _target.TextString, newH);
+                if (_target.HasMultipleParts && _radScheme1.IsChecked == true)
+                {
+                    _txtAttrDetail.Text = string.Format("当前编号已合并为: \"{0}\" | 当前字高: {1:0.###} (已更新)", _target.CombinedText, newH);
+                }
+                else
+                {
+                    _txtAttrDetail.Text = string.Format("当前文字内容: \"{0}\" | 当前字高: {1:0.###} (已更新)", _target.TextString, newH);
+                }
+
                 _doc.Editor.Regen();
-                _doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 属性【{0}】字高已成功更新为 {1:0.###}！(同步更新了 {2} 处同名块)\n",
+                _doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 属性【{0}】字高已成功更新为 {1:0.###}！({2} 处图块已联动)\n",
                     _target.Tag, newH, count));
             }
             catch (System.Exception ex)
             {
                 MessageBox.Show("修改字高失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExecuteMultiPartScheme()
+        {
+            if (_target == null || _doc == null) return;
+            bool syncAll = (_radSyncAll.IsChecked == true);
+            double curH;
+            if (!double.TryParse(_txtNewHeight.Text, out curH) || curH <= 0.001) curH = _target.CurrentHeight;
+
+            try
+            {
+                int count = 0;
+                using (_doc.LockDocument())
+                {
+                    if (_radScheme1.IsChecked == true)
+                    {
+                        count = AttributeModifyService.MergeMultiPartAttributes(_doc.Database, _target, syncAll);
+                        _txtAttrDetail.Text = string.Format("当前编号已合并为: \"{0}\" | 字高: {1:0.###}", _target.TextString, _target.CurrentHeight);
+                        _doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 门窗多段编号已成功合并为单属性【{0}】！(联动更新了 {1} 处图块)\n", _target.TextString, count));
+                    }
+                    else
+                    {
+                        count = AttributeModifyService.CompactMultiPartAttributes(_doc.Database, _target, curH, syncAll);
+                        _doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 门窗多段编号已完成智能紧凑重排！(联动更新了 {1} 处图块)\n", _target.Tag, count));
+                    }
+                }
+                _doc.Editor.Regen();
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox.Show("执行排版处理失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -356,22 +484,36 @@ namespace AttributeWorkbench.Views
                 Database db = _doc.Database;
                 Editor ed = _doc.Editor;
 
-                AttributeReference attClone = null;
+                List<AttributeReference> previewClones = new List<AttributeReference>();
                 using (_doc.LockDocument())
                 {
                     using (Transaction tr = db.TransactionManager.StartTransaction())
                     {
-                        AttributeReference att = tr.GetObject(_target.AttributeId, OpenMode.ForRead) as AttributeReference;
-                        if (att != null)
+                        if (_target.HasMultipleParts)
                         {
-                            attClone = (AttributeReference)att.Clone();
+                            foreach (AttributePartInfo part in _target.RelatedParts)
+                            {
+                                AttributeReference att = tr.GetObject(part.AttributeId, OpenMode.ForRead) as AttributeReference;
+                                if (att != null && !att.Invisible && !string.IsNullOrEmpty(att.TextString))
+                                {
+                                    previewClones.Add((AttributeReference)att.Clone());
+                                }
+                            }
+                        }
+                        else
+                        {
+                            AttributeReference att = tr.GetObject(_target.AttributeId, OpenMode.ForRead) as AttributeReference;
+                            if (att != null)
+                            {
+                                previewClones.Add((AttributeReference)att.Clone());
+                            }
                         }
                         tr.Commit();
                     }
-                    if (attClone == null) return;
+                    if (previewClones.Count == 0) return;
 
-                    // 启动 DrawJig 拖拽
-                    XY_Deepening_Toolbox.Commands.AttributeTextMoveJig jig = new XY_Deepening_Toolbox.Commands.AttributeTextMoveJig(_target.PickedPoint, attClone);
+                    // 启动 DrawJig 整体动态拖拽
+                    XY_Deepening_Toolbox.Commands.AttributeTextMoveJig jig = new XY_Deepening_Toolbox.Commands.AttributeTextMoveJig(_target.PickedPoint, previewClones);
                     PromptResult dragRes = ed.Drag(jig);
 
                     if (dragRes.Status == PromptStatus.OK)
@@ -382,7 +524,8 @@ namespace AttributeWorkbench.Views
                             bool syncAll = (_radSyncAll.IsChecked == true);
                             int moveCount = AttributeModifyService.MoveAttributePosition(db, _target, wcsDisp, syncAll);
                             ed.Regen();
-                            ed.WriteMessage(string.Format("\n[XY工具箱] 属性【{0}】位置平移已完成！(同步更新了 {1} 处同名块)\n", _target.Tag, moveCount));
+                            string scopeNote = syncAll ? string.Format("多图块同步更新了 {0} 处同名块", moveCount) : "仅当前单图块调整完成";
+                            ed.WriteMessage(string.Format("\n[XY工具箱] 属性【{0}】位置平移已完成！({1})\n", _target.Tag, scopeNote));
                         }
                     }
                 }

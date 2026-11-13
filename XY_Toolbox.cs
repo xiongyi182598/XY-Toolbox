@@ -5051,18 +5051,33 @@ namespace XY_Deepening_Toolbox
     {
         private Point3d _basePoint;
         private Point3d _currentPoint;
-        private AttributeReference _previewAtt;
+        private List<AttributeReference> _previewAtts;
 
         public Vector3d DisplacementVector
         {
             get { return _basePoint.GetVectorTo(_currentPoint); }
         }
 
-        public AttributeTextMoveJig(Point3d basePoint, AttributeReference attRef)
+        public AttributeTextMoveJig(Point3d basePoint, IEnumerable<AttributeReference> attRefs)
         {
             _basePoint = basePoint;
             _currentPoint = basePoint;
-            _previewAtt = (AttributeReference)attRef.Clone();
+            _previewAtts = new List<AttributeReference>();
+            if (attRefs != null)
+            {
+                foreach (AttributeReference att in attRefs)
+                {
+                    if (att != null)
+                    {
+                        _previewAtts.Add((AttributeReference)att.Clone());
+                    }
+                }
+            }
+        }
+
+        public AttributeTextMoveJig(Point3d basePoint, AttributeReference attRef)
+            : this(basePoint, attRef != null ? new AttributeReference[] { attRef } : null)
+        {
         }
 
         protected override SamplerStatus Sampler(JigPrompts prompts)
@@ -5089,13 +5104,17 @@ namespace XY_Deepening_Toolbox
 
         protected override bool WorldDraw(WorldDraw draw)
         {
-            if (_previewAtt != null)
+            if (_previewAtts != null && _previewAtts.Count > 0)
             {
                 Vector3d vec = DisplacementVector;
-                using (AttributeReference temp = (AttributeReference)_previewAtt.Clone())
+                Matrix3d mat = Matrix3d.Displacement(vec);
+                foreach (AttributeReference previewAtt in _previewAtts)
                 {
-                    temp.TransformBy(Matrix3d.Displacement(vec));
-                    draw.Geometry.Draw(temp);
+                    using (AttributeReference temp = (AttributeReference)previewAtt.Clone())
+                    {
+                        temp.TransformBy(mat);
+                        draw.Geometry.Draw(temp);
+                    }
                 }
             }
             return true;
