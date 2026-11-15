@@ -62,7 +62,11 @@ $sources = @(
     "TextFilterWorkbench\Views\TextFilterDialog.cs",
     "TextFilterWorkbench\Commands\TextFilterCommands.cs",
     "AttributeWorkbench\Services\AttributeModifyService.cs",
-    "AttributeWorkbench\Views\AttributeModifyDialog.cs"
+    "AttributeWorkbench\Views\AttributeModifyDialog.cs",
+    "FontWorkbench\Models\FontIssueItem.cs",
+    "FontWorkbench\Services\FontDiagnosisService.cs",
+    "FontWorkbench\ViewModels\FontFixViewModel.cs",
+    "FontWorkbench\Views\FontFixDialog.cs"
 )
 
 $existing = Get-ChildItem -Path "$PSScriptDir\XY_Toolbox_*.dll" -ErrorAction SilentlyContinue | Where-Object { $_.BaseName -match '^XY_Toolbox_(\d+)$' } | ForEach-Object { [int]$Matches[1] }

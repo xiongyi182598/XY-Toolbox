@@ -535,3 +535,16 @@
 
 (princ "\n★ [XY工具箱] 极速免炸开穿透删除模块 (KSC/XSC) 已就绪！\n")
 (princ)
+
+;; --------------------------------------------------------
+;; 字体修复直通快捷指令 (XZT / FONTFIX)
+;; --------------------------------------------------------
+(defun c:XZT ()
+  (setvar "USERS1" "XZT")
+  (vl-cmdf "_.XY_ATTMOD")
+  (princ)
+)
+(defun c:xzt () (c:XZT))
+(defun c:FONTFIX () (c:XZT))
+(defun c:fontfix () (c:XZT))
+(defun c:fontfix () (c:XZT))

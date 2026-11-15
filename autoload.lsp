@@ -1,18 +1,18 @@
 ;; ========================================================
-;; XY������ȫ���Զ������� (autoload.lsp)
-;; ������: ԭ�� AutoCAD (2020-2026) / �콨 (T20/T30 ȫϵ) / ��������
+;; XY?????????????????? (autoload.lsp)
+;; ??????: ??? AutoCAD (2020-2026) / ?? (T20/T30 ??) / ????????
 ;; ========================================================
 
 (vl-load-com)
 
-;; �Ը� AutoCAD ������Ϊ�������״̬
+;; ??? AutoCAD ????????????????
 (vl-catch-all-apply '(lambda () (vla-put-windowstate (vlax-get-acad-object) 3)))
 
-;; ����߰� AutoCAD ��ȫ���ػ��Ʋ�����ȫ�ĵ����� (���������ԴȪ)
+;; ?????? AutoCAD ??????????????????????? (???????????)
 (if (getvar "SECURELOAD") (setvar "SECURELOAD" 0))
 (if (getvar "ACADLSPASDOC") (setvar "ACADLSPASDOC" 1))
 
-;; ȫ�ֶ���λ������ʵ�� (��ȫ���̷���汾���ž�Ӳ��������)
+;; ??????��????????? (??????????��??????????????)
 (defun xy:get-toolbox-dir ( / p )
   (cond
     ((setq p (findfile "autoload.lsp"))
@@ -23,7 +23,7 @@
   )
 )
 
-;; ��ע�ᵱǰĿ¼����ǰ��Ծ Profile �������ξ��������·����ǰ
+;; ???????????????? Profile ???????��????????��?????
 (vl-catch-all-apply
   '(lambda ( / acad-obj prefs files cur-sup cur-tru my-dir)
      (setq my-dir (xy:get-toolbox-dir))
@@ -45,13 +45,13 @@
    )
 )
 
-;; ���Ļ��� 1������δ�����κ� DLL ǰ���Զ���Ⲣ�޸�Ӧ�� cache ��ʷ�����������߸����ݴ�� (ȫ���������ݴ�ջ�)
+;; ??????? 1??????��?????��? DLL ??????????????? cache ?????????????????????? (??????????????)
 (vl-catch-all-apply
   '(lambda ( / dir cache-dir c-files f src dst pend-dir p-files bat-f )
      (setq dir (xy:get-toolbox-dir))
      (if (and dir (/= dir ""))
        (progn
-         ;; A. �Զ�����ƽ����ʷ cache ����Ŀ¼����ɰ��ѹ����������ļ�
+         ;; A. ????????????? cache ??????????????????????????
          (setq cache-dir (strcat dir "/cache"))
          (if (vl-file-directory-p cache-dir)
            (progn
@@ -70,7 +70,7 @@
            )
          )
 
-         ;; B. �Զ��� pending_update �еĴ��滻�ļ�������ǵ���Ŀ¼
+         ;; B. ????? pending_update ?��???�I???????????????
          (setq pend-dir (strcat dir "/pending_update"))
          (if (vl-file-directory-p pend-dir)
            (progn
@@ -89,7 +89,7 @@
            )
          )
 
-         ;; ����ɸ���������
+         ;; ??????????????
          (foreach bat-f '("apply_update.bat" "run_updater.bat" "restart_apply.bat" "_apply_restart.bat")
            (if (findfile (strcat dir "/" bat-f))
              (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" bat-f)))
@@ -100,8 +100,8 @@
    )
 )
 
-;; ��ҵ��������̬�汾���ؼܹ� (Version-Ranked Dynamic Loader)��
-;; ɨ�����а汾�ź�׺ DLL (�� XY_Toolbox_105.dll)����׼ȷ��ȡȫ��λ���汾���� (�� 105)
+;; ?????????????��?????? (Version-Ranked Dynamic Loader)??
+;; ??????�ѷ�???? DLL (?? XY_Toolbox_105.dll)????????????��???��???? (?? 105)
 (defun xy:extract-dll-ver (fname / len base num-str i ch in-num)
   (setq base (vl-filename-base fname))
   (setq len (strlen base))
@@ -123,11 +123,11 @@
 )
 
 (defun xy:load-latest-dll ( / dir all-files best-dll best-ver f v target-path )
-  ;; 先扫描目录，计算出 best-ver，再决定是否需要 netload
+  ;; ��ɨ��Ŀ¼������� best-ver���پ����Ƿ���Ҫ netload
   (setq dir (xy:get-toolbox-dir))
   (if (and dir (/= dir ""))
     (progn
-      ;; 1. 扫描所有 DLL，选出版本号最大的
+      ;; 1. ɨ������ DLL��ѡ���汾������
       (setq all-files (vl-directory-files dir "XY_Toolbox*.dll" 1))
       (setq best-dll nil best-ver -1)
       (foreach f all-files
@@ -143,12 +143,12 @@
       (if (not best-dll) (setq best-dll "XY_Toolbox.dll"))
       (setq target-path (strcat dir "/" best-dll))
 
-      ;; 2. 仅在未加载 或 发现更新版本时才执行 netload
+      ;; 2. ����δ���� �� ���ָ��°汾ʱ��ִ�� netload
       (if (or (not *XY-TOOLBOX-LOADED*)
               (not *CURRENT-LOADED-VER*)
               (> best-ver *CURRENT-LOADED-VER*))
         (progn
-          ;; 同步覆盖 XY_Toolbox.dll
+          ;; ͬ������ XY_Toolbox.dll
           (if (and (/= best-dll "XY_Toolbox.dll") (findfile (strcat dir "/" best-dll)))
             (vl-catch-all-apply
               '(lambda ()
@@ -160,7 +160,7 @@
             )
           )
 
-          ;; 3. 执行 netload 加载最新 DLL
+          ;; 3. ִ�� netload �������� DLL
           (if (findfile target-path)
             (progn
               (setq target-path (vl-string-translate "\\" "/" target-path))
@@ -169,9 +169,9 @@
               )
               (setq *XY-TOOLBOX-LOADED* t)
               (setq *CURRENT-LOADED-VER* best-ver)
-              (princ (strcat "\n[XY工具箱] 已成功热重载最新核心: " best-dll "\n"))
+              (princ (strcat "\n[XY������] �ѳɹ����������º���: " best-dll "\n"))
 
-              ;; 4. 清理旧版本历史 DLL
+              ;; 4. �����ɰ汾��ʷ DLL
               (foreach f all-files
                 (if (and (/= f best-dll) (/= f "XY_Toolbox.dll"))
                   (vl-catch-all-apply 'vl-file-delete (list (strcat dir "/" f)))
@@ -187,7 +187,7 @@
 )
 (vl-catch-all-apply 'xy:load-latest-dll)
 
-;; �����ض�������ը���ڴ�ɾ��ģ (KSC/XSC)
+;; ??????????????????????? (KSC/XSC)
 (vl-catch-all-apply
   '(lambda ( / dir f )
      (setq dir (xy:get-toolbox-dir))
@@ -200,7 +200,7 @@
      (if (findfile "xy_block_erase.lsp") (load (findfile "xy_block_erase.lsp")))
    )
 )
-(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[��] ���ȼ��� xy_block_erase.lsp")))
+(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[??] ??????? xy_block_erase.lsp")))
 (defun c:XSC () (c:KSC))
 (defun c:BDE () (c:KSC))
 
@@ -549,7 +549,7 @@
 
     (if (and msg (not (member msg '("Function cancelled" "quit / exit abort"))))
 
-      (princ (strcat "\n[��]: " msg))
+      (princ (strcat "\n[??]: " msg))
 
     )
 
@@ -579,7 +579,7 @@
 
   (if doc (setq blks (vla-get-blocks doc)))
 
-  ;; ��Ŀ��ͼ��棬��������򶯴������̳�Դͼ����
+  ;; ????????��???????????????????????
   (if (null (tblsearch "LAYER" tar))
     (vl-catch-all-apply
       '(lambda ( / src-data src-ent)
@@ -606,7 +606,7 @@
 
 
 
-  ;; ��
+  ;; ??
 
   (if (= (strcase (getvar "CLAYER")) (strcase src))
 
@@ -763,7 +763,7 @@
 
   (vla-endundomark doc)
 
-  ;; (vla-regen doc acAllViewports) �Ƴ�ȫ�������ɣ��ž�����
+  ;; (vla-regen doc acAllViewports) ????????????????????
 
 
 
@@ -779,7 +779,7 @@
 
                  "\n=======================================================\n"))
 
-  (princ (strcat "\n [XY������] ͼ�� [" src "] �ѳɹ��ϲ��� [" tar "]�������� " (itoa count) " ͼԪ��\n"))
+  (princ (strcat "\n [XY??????] ??? [" src "] ????????? [" tar "]???????? " (itoa count) " ????\n"))
 
   (princ)
 
@@ -796,7 +796,7 @@
 
 
 ;; ========================================================
-;; ģ�� 3: ͼ��ϲ��ӻ�������� DCL
+;; ??? 3: ??????????????? DCL
 ;; ========================================================
 
 (if (null *last_tar_layer*) (setq *last_tar_layer* nil))
@@ -804,7 +804,7 @@
 
 ;; ========================================================
 ;;  :     (HB2 / XHB / fast_merge)
-;;  ��  DCL��     C#  
+;;  ??  DCL??     C#  
 ;; ========================================================
 (defun c:fast_merge ( / )
   (xy:load-latest-dll)
@@ -831,35 +831,35 @@
 (defun c:xhb () (c:fast_merge))
 
 (defun c:fast_merge_quick ()
-  ;; ����ʹ�� .NET ԭ���ڴ漶���ٺ� (0.005�룬��ռ��У������)
+  ;; ??????? .NET ?????��????? (0.005???????��??????)
   (xy:load-latest-dll)
   (if (not (vl-catch-all-error-p (vl-catch-all-apply 'vl-cmdf (list "_.FASTMERGE"))))
     (princ)
     (progn
       (setvar "CMDECHO" 0)
       (princ "\n=======================================================")
-      (princ "\n>>> ��ͼ��� (�ⵯ����ѡ��) <<<")
-      (setq src-lyr (pick_layer_from_entity "\n1. ����ͼ���ϵ�ѡԴͼ�㡿ͼ: "))
+      (princ "\n>>> ?????? (?????????) <<<")
+      (setq src-lyr (pick_layer_from_entity "\n1. ????????????????: "))
       (if src-lyr
         (progn
-          (princ (strcat " -> ��Դͼ��: [" src-lyr "]"))
+          (princ (strcat " -> ??????: [" src-lyr "]"))
           (setq *last_src_layer* src-lyr)
           (setq tar-lyr (pick_layer_from_entity 
                           (if *last_tar_layer*
-                            (strcat "\n2. ���ѡĿ��ͼ��ͼ (ֱ�ӻس�Ĭ: [" *last_tar_layer* "]): ")
-                            "\n2. ����ͼ���ϵ�ѡĿ��ͼ��ͼ: ")))
+                            (strcat "\n2. ??????????? (??????: [" *last_tar_layer* "]): ")
+                            "\n2. ??????????????????: ")))
           (if (and (null tar-lyr) *last_tar_layer*)
             (setq tar-lyr *last_tar_layer*)
           )
           (if tar-lyr
             (if (= (strcase src-lyr) (strcase tar-lyr))
-              (princ "\n[��ʾ] Դͼ�����ͼ����ͬ������ϲ�")
+              (princ "\n[???] ?????????????????????")
               (progn
                 (setq *last_tar_layer* tar-lyr)
                 (execute_layer_merge src-lyr tar-lyr T T)
               )
             )
-            (princ "\n[��ʾ] ָ����ͼ�㣬������ȡ��")
+            (princ "\n[???] ?????????????????")
           )
         )
       )
@@ -875,7 +875,7 @@
 
   (if doc (setq blks (vla-get-blocks doc)))
 
-  ;; ��Ŀ��ͼ��棬��������򶯴������̳�Դͼ����
+  ;; ????????��???????????????????????
   (if (null (tblsearch "LAYER" tar))
     (vl-catch-all-apply
       '(lambda ( / src-data src-ent)
@@ -966,7 +966,7 @@
 
       (vla-endundomark doc)
 
-      ;; (vla-regen doc acAllViewports) �Ƴ�ȫ�������ɣ��ž�����
+      ;; (vla-regen doc acAllViewports) ????????????????????
 
       (princ (strcat "\n======================================================="
 
@@ -982,7 +982,7 @@
 
     )
 
-    (princ "\n>>> �Ħ�\n")
+    (princ "\n>>> ???\n")
 
   )
 
@@ -1001,14 +1001,14 @@
 
 
 ;; ========================================================
-;; ģ�� 5: ������ִ�ƽ (MW / MY / UNIVERSAL_MOVE_TEXT)
-;; ���ȵ��� .NET ԭ�� DrawJig��֧������ڱ�����Ӧ����������ʵʱ��ק�������룩
+;; ??? 5: ????????? (MW / MY / UNIVERSAL_MOVE_TEXT)
+;; ??????? .NET ??? DrawJig???????????????????????????????????????
 ;; ========================================================
 
 (defun c:UNIVERSAL_MOVE_TEXT ( / )
   (vl-catch-all-apply 'xy:load-latest-dll)
 
-;; �����ض�������ը���ڴ�ɾ��ģ (KSC/XSC)
+;; ??????????????????????? (KSC/XSC)
 (vl-catch-all-apply
   '(lambda ( / dir f )
      (setq dir (xy:get-toolbox-dir))
@@ -1021,11 +1021,11 @@
      (if (findfile "xy_block_erase.lsp") (load (findfile "xy_block_erase.lsp")))
    )
 )
-(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[��] ���ȼ��� xy_block_erase.lsp")))
+(defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[??] ??????? xy_block_erase.lsp")))
 (defun c:XSC () (c:KSC))
 (defun c:BDE () (c:KSC))
 
-  (vl-cmdf "_.MW")
+  (vl-cmdf "_.XY_ATTMOD")
   (princ)
 )
 
@@ -1159,7 +1159,7 @@
 
             (setq line (vl-string-trim " \t\r\n" line))
 
-            ;; ���� UTF-8 BOM ������������
+            ;; ???? UTF-8 BOM ????????????
 
             (while (and (> (strlen line) 0) 
 
@@ -1179,7 +1179,7 @@
 
                   (setq val (substr line (+ (vl-string-search "=" line) 2)))
 
-                  ;; ȥ������ BOM �򲻼���
+                  ;; ??????? BOM ?????
 
                   (setq k (vl-string-trim " \t\r\n" k))
 
@@ -1234,9 +1234,9 @@
 
       (write-line "; ========================================================" f)
 
-      (write-line "; XY���� - �ݼ������ļ� (shortcuts.ini)" f)
+      (write-line "; XY???? - ?????????? (shortcuts.ini)" f)
 
-      (write-line "; �ֺŸ����������ĺ����� REKEY ��������ˢ����Ч" f)
+      (write-line "; ??????????????????? REKEY ?????????????��" f)
 
       (write-line "; ========================================================" f)
 
@@ -1347,7 +1347,7 @@
 
 
 
-  ;; �������п�ݼ� (�ֱ������Сд�����)
+  ;; ???????��??? (????????����?????)
 
   (bind_alias_to_command cmd_quick 'c:fast_merge_quick)
 
@@ -1365,7 +1365,7 @@
 
 
 
-  ;; ���û��Զ���ݼ��볣�ÿ�ݼ�����ʹ��
+  ;; ??????????????????????????
 
   (if (null (read "c:HB1")) (defun c:HB1 () (c:fast_merge_quick)))
 
@@ -1394,7 +1394,7 @@
 
 ;; ========================================================
 
-;; ���ʲ����������� (XYSZ / ZYSZ)
+;; ??????????????? (XYSZ / ZYSZ)
 
 ;; ========================================================
 
@@ -1416,7 +1416,7 @@
 
 ;; ========================================================
 
-;; �ݼ������������� (SETKEY / KJSZ / CFG)
+;; ??????????????? (SETKEY / KJSZ / CFG)
 
 ;; ========================================================
 
@@ -1439,13 +1439,13 @@
 
           (startapp "notepad.exe" ini_path)
 
-          (princ "\n [XY������] ���ڼ��´򿪽ݼ��ļ� shortcuts.ini")
+          (princ "\n [XY??????] ????????????? shortcuts.ini")
 
-          (princ "\n �Ĳ�������������� REKEY ��������ˢ����Ч��\n")
+          (princ "\n ???????????????? REKEY ?????????????��??\n")
 
         )
 
-        (alert "�ҵ��ݼ������ļ� shortcuts.ini")
+        (alert "????????????? shortcuts.ini")
 
       )
 
@@ -1471,7 +1471,7 @@
 
 ;; ========================================================
 
-;; �ݼ��������� (REKEY / RELOADKEY)
+;; ??????????? (REKEY / RELOADKEY)
 
 ;; ========================================================
 
@@ -1501,19 +1501,19 @@
 
   (princ "\n========================================================")
 
-  (princ "\n   [XY������] �ݼ��ѳɹ����¼�����Ч��")
+  (princ "\n   [XY??????] ????????????????��??")
 
-  (princ (strcat "\n  1. ͼ�㼫�� (�ⵯ)   :  " _mq " "))
+  (princ (strcat "\n  1. ????? (??)   :  " _mq " "))
 
-  (princ (strcat "\n  2. ͼ��ϲ���� (ѡ��)   :  " _m  " "))
+  (princ (strcat "\n  2. ???????? (???)   :  " _m  " "))
 
-  (princ (strcat "\n  3. ͼ�����0       :  " _b0 " "))
+  (princ (strcat "\n  3. ??????0       :  " _b0 " "))
 
-  (princ (strcat "\n  4. �������ͬƽ      :  " _my " "))
+  (princ (strcat "\n  4. ?????????      :  " _my " "))
 
-  (princ (strcat "\n  5. �ײ�ͼԪ��̽        :  " _tc " "))
+  (princ (strcat "\n  5. ????????        :  " _tc " "))
 
-  (princ (strcat "\n  6. ����������ݼ�      :  " _p  " "))
+  (princ (strcat "\n  6. ????????????      :  " _p  " "))
 
   (princ "\n========================================================\n")
 
@@ -1527,7 +1527,7 @@
 
 ;; ========================================================
 
-;; ��ʱӦ�ýݼ�����ӡ����ʾ
+;; ??????????????????
 
 ;; ========================================================
 
@@ -1559,25 +1559,25 @@
 
 (princ "\n========================================================")
 
-(princ "\n   XY������ȫ�׹��߼� - ���سɹ�")
+(princ "\n   XY????????????? - ??????")
 
-(princ (strcat "\n  1. ͼ�㼫�� (�ⵯ)   :  " _mq " "))
+(princ (strcat "\n  1. ????? (??)   :  " _mq " "))
 
-(princ (strcat "\n  2. ͼ��ϲ���� (ѡ��)   :  " _m  " "))
+(princ (strcat "\n  2. ???????? (???)   :  " _m  " "))
 
-(princ (strcat "\n  3. ͼ�����0       :  " _b0 " "))
+(princ (strcat "\n  3. ??????0       :  " _b0 " "))
 
-(princ (strcat "\n  4. �������ͬƽ      :  " _my " "))
+(princ (strcat "\n  4. ?????????      :  " _my " "))
 
-(princ (strcat "\n  5. �ײ�ͼԪ��̽        :  " _tc " "))
+(princ (strcat "\n  5. ????????        :  " _tc " "))
 
 (princ "\n  --------------------------------------------------------")
 
-(princ (strcat "\n   ����ʲ��������  :  " _p " "))
+(princ (strcat "\n   ??????????????  :  " _p " "))
 
-(princ "\n   ����ݼ�����        :  SETKEY / KJSZ ")
+(princ "\n   ??????????        :  SETKEY / KJSZ ")
 
-(princ "\n   �ݼ����¼�����Ч      :  REKEY ")
+(princ "\n   ????????????��      :  REKEY ")
 
 (princ "\n========================================================\n")
 
@@ -1587,7 +1587,7 @@
 
 
 ;; ========================================================
-;; �����û�����ݼ� (shortcuts.lsp)
+;; ????????????? (shortcuts.lsp)
 ;; ========================================================
 (if (findfile "shortcuts.lsp")
   (load (findfile "shortcuts.lsp"))
@@ -1603,9 +1603,9 @@
 (princ)
 
 ;; ========================================================
-;; �������� (������临�Ӿ����������� RELOAD �����뼶ˢ��)
+;; ???????? (??????��????????????? RELOAD ?????????)
 ;; ========================================================
-;; �����ӿ�ͼ�㸲�� (VPR)
+;; ???????????? (VPR)
 (defun c:VPR ( / doc lt ltr )
   (vl-load-com)
   (setq doc (if (vlax-get-acad-object) (vla-get-activedocument (vlax-get-acad-object))))
@@ -1621,34 +1621,34 @@
            )
          )
          (vla-endundomark doc)
-         ;; (vla-regen doc acAllViewports) �Ƴ�ȫ�������ɣ��ž�����
+         ;; (vla-regen doc acAllViewports) ????????????????????
        )
     )
   )
-  (princ "\n [XY������] �ӿ�ͼ�㸲���ѳɹ��أ�\n")
+  (princ "\n [XY??????] ???????????????\n")
   (princ)
 )
 (defun c:reset_vp_overrides () (c:VPR))
 
-;; ��������������� (PU)
+;; ??????????????? (PU)
 (defun c:PU ( / )
   (setvar "CMDECHO" 0)
   (command "_.purge" "_all" "*" "_no")
   (command "_.audit" "_y")
   (setvar "CMDECHO" 1)
-  (princ "\n [XY������] ͼֽ����������޸���ɣ�\n")
+  (princ "\n [XY??????] ??????????????????\n")
   (princ)
 )
 
 
 ;; ========================================================
-;; XY���� - Xǰ׺ƴ������ĸ��׼���ָ� (�溣/��)
+;; XY???? - X??????????????????? (?��/??)
 ;; ========================================================
 (defun c:XGJ ()
   (if (not *XY-TOOLBOX-LOADED*) (xy:load-latest-dll))
   (if (not (vl-cmdf "XGJ"))
     (if (not (vl-cmdf "XYPANEL"))
-      (if c:XYSZ (c:XYSZ) (princ "\n[XY������] �������̨ʧ�ܣ����ȼ��� XY�����䣡"))
+      (if c:XYSZ (c:XYSZ) (princ "\n[XY??????] ??????????????????? XY??????"))
     )
   )
   (princ)
@@ -1660,17 +1660,17 @@
 (defun c:xhb () (c:fast_merge))
 (defun c:HB2 () (c:fast_merge))
 (defun c:hb2 () (c:fast_merge))
-(defun c:XJH () (if c:fast_merge_quick (c:fast_merge_quick) (princ "\n���ȼ��� XY�����䣡")))
+(defun c:XJH () (if c:fast_merge_quick (c:fast_merge_quick) (princ "\n??????? XY??????")))
 (defun c:XDJ () (command "XDJ") (princ))
 (defun c:XJD () (command "XJD") (princ))
 (defun c:XHF () (command "XHF") (princ))
 (defun c:XDK () (command "XDJ") (princ))
-(defun c:XTC () (if c:detect_sub_entity (c:detect_sub_entity) (princ "\n���ȼ��� XY�����䣡")))
-(defun c:XSY () (if c:MW (c:MW) (princ "\n���ȼ��� XY�����䣡")))
+(defun c:XTC () (if c:detect_sub_entity (c:detect_sub_entity) (princ "\n??????? XY??????")))
+(defun c:XSY () (if c:MW (c:MW) (princ "\n??????? XY??????")))
 (defun c:xsy () (c:XSY))
 (defun c:XGA () (c:XSY))
 (defun c:xga () (c:XSY))
-(defun c:XGL () (if c:B0 (c:B0) (princ "\n���ȼ��� XY�����䣡")))
+(defun c:XGL () (if c:B0 (c:B0) (princ "\n??????? XY??????")))
 (defun c:XKL () (c:XGL))
 (defun c:FZW () (vl-cmdf "FZW"))
 (defun c:fzw () (vl-cmdf "FZW"))
@@ -1681,7 +1681,7 @@
 (defun c:XSK () (vl-cmdf "_.XSK") (princ))
 (defun c:xsk () (c:XSK))
 (defun c:XQL () (c:PU))
-(defun c:XKJ () (if c:SETKEY (c:SETKEY) (princ "\n���ȼ��� XY�����䣡")))
+(defun c:XKJ () (if c:SETKEY (c:SETKEY) (princ "\n??????? XY??????")))
 
 (defun c:RELOAD ( / path dir erase_f )
   (setq dir (xy:get-toolbox-dir))
@@ -1698,30 +1698,30 @@
           (if (findfile erase_f) (load erase_f))
         )
       )
-      (defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[��ʾ] ���������͸ɾ��ģ��...")))
+      (defun c:KSC () (if c:XY_BLOCK_ERASE (c:XY_BLOCK_ERASE) (princ "\n[???] ????????????????...")))
       (defun c:XSC () (c:KSC))
       (defun c:BDE () (c:KSC))
       (if apply_all_toolbox_shortcuts
         (apply_all_toolbox_shortcuts)
       )
-      ;; 重置版本号，强制触发 netload 加载最新 DLL
+      ;; ���ð汾�ţ�ǿ�ƴ��� netload �������� DLL
       (setq *CURRENT-LOADED-VER* 0)
       (setq *XY-TOOLBOX-LOADED* nil)
       (vl-catch-all-apply 'xy:load-latest-dll)
       (vl-catch-all-apply 'vl-cmdf (list "XY_UPDATE_PANEL"))
       (princ "\n========================================================\n")
-      (princ "�� [XY������] ����������ȫ�׿�ݼ������سɹ� (XCZ)��\n")
-      (princ "�� ���������ȫ�׹�����ˢ�£�\n")
-      (princ "  - SK  / SKYS : �ӿ�ͼ����ʽ�������� (��͸ʰȡ/��ɫ/������)\n")
-      (princ "  - FZW / XFZ  : ͼ�龵������ԭλ��͸���� (���������ϸ�����)\n")
-      (princ "  - XKB / XLS  : ԭλ����λ�༭��͸ͼ��������ƽ��\n")
-      (princ "  - XHB / XJH  : �淶��ͼ��ϲ����뼫�ٵ�ѡ�ϲ�\n")
-      (princ "  - KSC / XSC  : ��ը����͸ɾ������ͼԪ (֧��M������/��ռ)\n")
-      (princ "  - XGX / UPDATE: ��ҵ�����߼�����ϵͳ\n")
-      (princ "  - XGJ / XYGJ : ��߹���̨���\n")
+      (princ "?? [XY??????] ???????????????????????? (XCZ)??\n")
+      (princ "?? ?????????????????????\n")
+      (princ "  - SK  / SKYS : ????????????????? (?????/???/??????)\n")
+      (princ "  - FZW / XFZ  : ??????????��??????? (???????????????)\n")
+      (princ "  - XKB / XLS  : ?��????��?????????????????\n")
+      (princ "  - XHB / XJH  : ?�Z??????????????????\n")
+      (princ "  - KSC / XSC  : ????????????????? (???M??????/???)\n")
+      (princ "  - XGX / UPDATE: ????????????????\n")
+      (princ "  - XGJ / XYGJ : ??????????\n")
       (princ "========================================================\n")
     )
-    (princ "\n[����] δ�ҵ� autoload.lsp �ļ�\n")
+    (princ "\n[????] ��??? autoload.lsp ???\n")
   )
   (princ)
 )
@@ -1729,11 +1729,11 @@
 (defun c:XYLOAD () (c:RELOAD))
 ;; (c:XY removed to avoid conflict with Hailong)
 
-;; Ĭ�ͼ��أ�ȷ CAD ��������ʱ����̨���ڶ���ʾ״ (�뺣/��һ)
+;; ???????? CAD ??????????????????????? (??/???)
 (vl-catch-all-apply
   '(lambda ()
        (princ "
-[XY������] ���ĳ����Ѿ�Ĭ�ͣ��� XGJ �򿪹���̨�� XKJ ���ýݼ�
+[XY??????] ???????????????? XGJ ???????? XKJ ??????
 ")
    )
 )
@@ -1749,7 +1749,7 @@
 (defun c:UPDATE () (c:XGX))
 (defun c:update () (c:XGX))
 
-;; --- 智能文字选择与批量过滤 (XTX / XSW / XTXD / XTXH / XTXC) ---
+;; --- ��������ѡ������������ (XTX / XSW / XTXD / XTXH / XTXC) ---
 (defun c:XTX () (vl-cmdf "_.XTX") (princ))
 (defun c:xtx () (c:XTX))
 (defun c:XSW () (vl-cmdf "_.XSW") (princ))
@@ -1760,3 +1760,16 @@
 (defun c:xtxh () (c:XTXH))
 (defun c:XTXC () (vl-cmdf "_.XTXC") (princ))
 (defun c:xtxc () (c:XTXC))
+
+;; --- ����ͼֽȱʧ��������뼫���޸� (XZT / FONTFIX) ---
+(defun c:XZT ()
+  (setvar "USERS1" "XZT")
+  (vl-cmdf "_.XY_ATTMOD")
+  (princ)
+)
+(defun c:xzt () (c:XZT))
+(defun c:FONTFIX () (c:XZT))
+(defun c:fontfix () (c:XZT))
+(defun c:fontfix () (c:XZT))
+
+(princ)

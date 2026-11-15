@@ -58,10 +58,10 @@ XA2-L0100$0$152-活动家具,XA2-L0100$0$152-活动家具,True,#3F7F7F,Continuou
 152-活动家具,UDG-P-活动家具,True,#005F7F,DASH
 0-FURNTURE.H 活动家具,0-FURNTURE.H 活动家具,True,#ADADAD,Continuous
 _A-PLAN-上层投影线,_A-PLAN-上层投影线,True,#FF0000,XA1-L0100|DASHED2
-_A-PLAN-排水沟,_A-PLAN-排水沟,True,#BFFF7F,Continuous
+_A-PLAN-排水沟,UDG-排水沟,True,#5B5B5B,Continuous
 _A-PLAN-栏杆扶手,_A-PLAN-栏杆扶手,True,#992600,Continuous
 _A-PLAN-保温,_A-PLAN-保温,True,#3F6F7F,Continuous
-_A-PLAN-阳台反坎,_A-PLAN-阳台反坎,True,#FFDF7F,Continuous
+_A-PLAN-阳台反坎,UDG-阳台反坎,True,#990000,Continuous
 _A-PLAN-屋面细线,_A-PLAN-屋面细线,True,#CCB266,Continuous
 _A-PLAN-台阶坡道,_A-PLAN-台阶坡道,True,#CC3300,Continuous
 124-装饰轮廓（完成面）,124-装饰轮廓（完成面）,True,#00BFFF,Continuous
@@ -108,8 +108,8 @@ FF-Text【平面文字】,FF-Text【平面文字】,True,#FFFF00,Continuous
 $自喷,$自喷,True,#00FFFF,Continuous
 NT-防排烟,NT-防排烟,True,#FF0000,Continuous
 WIRE-照明,WIRE-照明,True,#00FFFF,Continuous
-XA1-L0100$0$XA2-L0100$0$152-活动家具,XA1-L0100$0$XA2-L0100$0$152-活动家具,True,#3F7F7F,Continuous
-_A-PLAN-平面饰线,_A-PLAN-平面饰线,True,#FFBF7F,Continuous
+XA1-L0100$0$XA2-L0100$0$152-活动家具,UDG-P-活动家具,True,#005F7F,DASH
+_A-PLAN-平面饰线,UDG-平面饰线,True,#5B5B5B,DASH
 _D-铝板,_D-铝板,True,#FFFF7F,Continuous
 EQ-采暖分集水器,EQ-采暖分集水器,True,#FFFFFF,Continuous
 PIPE-地暖供,PIPE-地暖供,True,#00FFFF,Continuous
@@ -117,8 +117,8 @@ A-FLOR-SPCL,A-FLOR-SPCL,True,#994C85,Continuous
 6-家具-143,6-家具-143,True,#808080,Continuous
 P-平面洁具,P-平面洁具,True,#FF0000,Continuous
 建-设备-洁具,建-设备-洁具,True,#7FDFFF,Continuous
-家具,家具,True,#808080,Continuous
-家具虚线,家具虚线,True,#5B5B5B,XA1-L0100|DASHED
+家具,UDG-P-活动家具,True,#005F7F,DASH
+家具虚线,UDG-P-活动家具,True,#005F7F,DASH
 _A-EQUIPMENT,_A-EQUIPMENT,True,#FF7F00,Continuous
 NT-建筑预留洞,NT-建筑预留洞,True,#FF00FF,Continuous
 PIPE-给水,PIPE-给水,True,#00FF00,Continuous
@@ -133,7 +133,7 @@ XOBA-E1000$0$A-fanghuoboli,XOBA-E1000$0$A-fanghuoboli,True,#FF0000,Continuous
 A-DIM_符号,A-DIM_符号,True,#00FF00,Continuous
 A-修定云线,A-修定云线,True,#FF0000,Continuous
 A-DIM,A-DIM,True,#00FF00,Continuous
-A-DoorWin,UDG-DoorWin,False,#990000,Continuous
+A-DoorWin,UDG-DoorWin,True,#990000,Continuous
 3T_BAR,3T_BAR,True,#FFFFFF,Continuous
 A-GLASS,A-GLASS,True,#FFFF00,Continuous
 A-WALL,A-WALL,True,#FFFFFF,Continuous
@@ -237,3 +237,19 @@ A-消防救援窗,A-消防救援窗,True,#00FFFF,Continuous
 00-走道连通口(常开防火门),00-走道连通口(常开防火门),True,#0000FF,Continuous
 RAIL,RAIL,True,#667FCC,Continuous
 DIM_给水,DIM_给水,True,#00FF00,Continuous
+UDG-A-轴线,UDG-A-轴线,True,#4C262F,CENTER
+UDG-A-轴号,UDG-A-轴号,True,#00FFFF,Continuous
+UDG-Dim-平面尺寸,UDG-Dim-平面尺寸,True,#0000FF,Continuous
+UDG-A-室内窗,UDG-A-室内窗,True,#0099CC,Continuous
+UDG-P-厨房设备,UDG-P-厨房设备,True,#FF0000,Continuous
+UDG-P-固定低柜,UDG-P-固定低柜,True,#FFBF7F,Continuous
+UDG-W-消火栓,UDG-W-消火栓,True,#FF0000,Continuous
+UDG-平面用电设备,UDG-平面用电设备,True,#99994C,DASH
+UDG-安防,UDG-安防,True,#00FFFF,Continuous
+UDG-天花填充,UDG-天花填充,True,#5B5B5B,Continuous
+UDG-A-轴号文字,UDG-A-轴号文字,True,#FFFF00,Continuous
+UDG-GROUND,UDG-GROUND,True,#5B5B5B,Continuous
+UDG-DoorWin,UDG-DoorWin,True,#990000,Continuous
+UDG-阳台反坎,UDG-阳台反坎,True,#990000,Continuous
+UDG-排水沟,UDG-排水沟,True,#5B5B5B,Continuous
+UDG-平面饰线,UDG-平面饰线,True,#5B5B5B,DASH

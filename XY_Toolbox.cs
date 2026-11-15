@@ -339,7 +339,7 @@ namespace XY_Deepening_Toolbox
 
     public class Commands
     {
-        public static readonly int CurrentBuildVersion = 189;
+        public static readonly int CurrentBuildVersion = 198;
 
         public static string GetApplicationDirectory()
         {
@@ -438,6 +438,21 @@ namespace XY_Deepening_Toolbox
         {
             if (TryForwardToLatest("ReloadAppCommand")) return;
 
+            // 智能指令分发通道 (热重载期间免重启直接派发全新功能，100% 杜绝未知命令与 LISP 递归溢出)
+            try
+            {
+                object dispatchObj = Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("USERS1");
+                string dispatchCmd = dispatchObj != null ? dispatchObj.ToString() : "";
+                if (string.Equals(dispatchCmd, "XZT", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(dispatchCmd, "FONTFIX", StringComparison.OrdinalIgnoreCase))
+                {
+                    try { Autodesk.AutoCAD.ApplicationServices.Application.SetSystemVariable("USERS1", ""); } catch { }
+                    OpenFontFixWorkbench();
+                    return;
+                }
+            }
+            catch { }
+
             Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             Editor ed = doc.Editor;
@@ -495,7 +510,7 @@ namespace XY_Deepening_Toolbox
                 ed.WriteMessage("\n========================================================");
                 ed.WriteMessage(string.Format("\n★ [XY工具箱] 程序热重载成功 (XCZ)！当前运行核心: v{0}", Math.Max(CurrentBuildVersion, bestVer)));
                 ed.WriteMessage("\n★ 核心 .NET 内核与 LISP 快捷键已全部刷新为最新版本 (无需重启 AutoCAD)");
-                ed.WriteMessage("\n★ 属性修改面板 (XSY/MW)、穿透删除 (KSC/XSC) 与图层合并器已全部就绪");
+                ed.WriteMessage("\n★ 字体修复工作台 (XZT)、属性修改面板 (XSY/MW)、穿透删除 (KSC) 与图层合并器已全部就绪");
                 ed.WriteMessage("\n========================================================\n");
             }
             catch (System.Exception ex)
@@ -2045,6 +2060,22 @@ namespace XY_Deepening_Toolbox
         public static void MoveSingleAttributeText()
         {
             if (TryForwardToLatest("MoveSingleAttributeText")) return;
+
+            // 智能指令分发通道 (第一时间拦截，绝不调用任何其他逻辑)
+            try
+            {
+                object dispatchObj = Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("USERS1");
+                string dispatchCmd = dispatchObj != null ? dispatchObj.ToString() : "";
+                if (string.Equals(dispatchCmd, "XZT", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(dispatchCmd, "FONTFIX", StringComparison.OrdinalIgnoreCase))
+                {
+                    try { Autodesk.AutoCAD.ApplicationServices.Application.SetSystemVariable("USERS1", ""); } catch { }
+                    OpenFontFixWorkbench();
+                    return;
+                }
+            }
+            catch { }
+
             EnsureLspLoaded();
             Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
@@ -2075,6 +2106,31 @@ namespace XY_Deepening_Toolbox
             {
                 try { doc.SendStringToExecute("XSY ", true, false, false); } catch { }
             });
+        }
+
+        // ========================================================
+        // 13. 智能图纸缺失字体体检与修复工作台 (XZT / FONTFIX / XY_FONTFIX)
+        // 彻底解决图纸文字/标题显示为 ????? 问号乱码的问题，自动推荐最佳可用大字体/西文字体/TTF，并可写入本机 acad.fmp
+        // ========================================================
+        [CommandMethod("XZT")]
+        [CommandMethod("FONTFIX")]
+        [CommandMethod("XY_FONTFIX")]
+        public static void OpenFontFixWorkbench()
+        {
+            if (TryForwardToLatest("OpenFontFixWorkbench")) return;
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                FontWorkbench.Views.FontFixDialog.ShowDialog(doc.Database);
+            }
+            catch (System.Exception ex)
+            {
+                if (doc.Editor != null)
+                {
+                    doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 字体修复工作台运行异常: {0}\n", ex.Message));
+                }
+            }
         }
 
         // ========================================================
@@ -4759,13 +4815,16 @@ namespace XY_Deepening_Toolbox
             RegisterSection(sec1);
 
             // 分类 2: 图块与文字工具 (默认展开，方便直观查看)
-            CategorySection sec2 = CreateCategorySection("图块与文字", 7, true);
+            CategorySection sec2 = CreateCategorySection("图块与文字", 8, true);
             AddItemRowToSection(sec2, "🎯", "文字吸选", "XTX", 
                 "智能文字选择 (XTX / XSW)\n吸管点选参考文字，按字高容差/字体样式/颜色随层极速筛选选中并置入夹点", 
                 () => SendCadCommand("XTX "));
             AddItemRowToSection(sec2, "🎛️", "文字看板", "XTXD", 
                 "文字过滤看板 (XTXD / XY_TEXTFILTER)\n深色交互看板：多条件组合过滤/随层穿透/仅隔离显示/批量改字高样式颜色", 
                 () => SendCadCommand("XTXD "));
+            AddItemRowToSection(sec2, "🅰️", "字体修复", "XZT", 
+                "字体修复工作台 (XZT / FONTFIX)\n自动体检当前图纸缺失字体，智能匹配替换最兼容字体，彻底消除 ????? 乱码并可固化至 acad.fmp", 
+                () => OpenFontFixWorkbench());
             AddItemRowToSection(sec2, "✂️", "穿透删除", "KSC", 
                 "穿透删除 (KSC)\n免炸开直接点选或框选穿透删除块内图元，按 M 键自由切换【同名块全部联动】或【仅改当前(独占)】模式 (别名: XSC, BDE)", 
                 () => SendCadCommand("KSC "));

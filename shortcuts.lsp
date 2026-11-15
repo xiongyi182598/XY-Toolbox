@@ -1,11 +1,11 @@
 ;; ========================================================
-;; XYå·¥å…·ç®± - å¿«æ·é”®ç›´é€šæ˜ å°„è¡¨ (shortcuts.lsp)
-;; ç¼–ç : ANSI / GBK (å®Œç¾å…¼å®¹å„ç‰ˆæœ¬ AutoCAD)
+;; XY¹¤¾ßÏä - ¿ì½İ¼üÖ±Í¨Ó³Éä±í (shortcuts.lsp)
+;; ±àÂë: ANSI / GBK (ÍêÃÀ¼æÈİ¸÷°æ±¾ AutoCAD)
 ;; ========================================================
 
 (vl-load-com)
 
-;; 1. ç¡®ä¿ autoload.lsp å…ˆè¡ŒåŠ è½½å°±ç»ª
+;; 1. È·±£ autoload.lsp ÏÈĞĞ¼ÓÔØ¾ÍĞ÷
 (if (null execute_layer_merge)
   (progn
     (if (findfile "autoload.lsp")
@@ -14,13 +14,13 @@
   )
 )
 
-;; 2. å›¾å±‚åˆå¹¶æŒ‡ä»¤æ˜ å°„ (ç»Ÿä¸€è°ƒç”¨ C# ç°ä»£é¢æ¿ï¼Œå½»åº•æœç»æ—§ç‰ˆ DCL)
+;; 2. Í¼²ãºÏ²¢Ö¸ÁîÓ³Éä (Í³Ò»µ÷ÓÃ C# ÏÖ´úÃæ°å£¬³¹µ×¶Å¾ø¾É°æ DCL)
 (defun c:XHB () (c:fast_merge))
 (defun c:xhb () (c:fast_merge))
 (defun c:HB2 () (c:fast_merge))
 (defun c:hb2 () (c:fast_merge))
 
-;; 2.1 æ™ºèƒ½å›¾å±‚å¯¹æ¯”ä¸ç¿»å›¾ç³»ç»Ÿ (XTC / XYCOMPARE) & ä¸€é”®å¥—ç”¨ç¿»å›¾ (XFT / HBL)
+;; 2.1 ÖÇÄÜÍ¼²ã¶Ô±ÈÓë·­Í¼ÏµÍ³ (XTC / XYCOMPARE) & Ò»¼üÌ×ÓÃ·­Í¼ (XFT / HBL)
 (defun c:XTC () (vl-cmdf "_.XTC"))
 (defun c:xtc () (vl-cmdf "_.XTC"))
 (defun c:XFT () (vl-cmdf "_.XFT"))
@@ -28,31 +28,31 @@
 (defun c:HBL () (vl-cmdf "_.HBL"))
 (defun c:hbl () (vl-cmdf "_.HBL"))
 
-;; 3. æé€Ÿç‚¹é€‰åˆå¹¶æŒ‡ä»¤ (å…å¼¹çª—)
+;; 3. ¼«ËÙµãÑ¡ºÏ²¢Ö¸Áî (Ãâµ¯´°)
 (defun c:XJH () (c:fast_merge_quick))
 (defun c:xjh () (c:fast_merge_quick))
 (defun c:HB1 () (c:fast_merge_quick))
 (defun c:hb1 () (c:fast_merge_quick))
 
-;; æ™ºèƒ½é˜²å†²çªå¿«æ·é”®: LM (è‹¥æœªå ç”¨) ä¸ HC (è‹¥æœªå ç”¨)
+;; ÖÇÄÜ·À³åÍ»¿ì½İ¼ü: LM (ÈôÎ´Õ¼ÓÃ) Óë HC (ÈôÎ´Õ¼ÓÃ)
 (if (null (read "c:LM")) (defun c:LM () (c:fast_merge_quick)))
 (if (null (read "c:lm")) (defun c:lm () (c:fast_merge_quick)))
 (if (null (read "c:HC")) (defun c:HC () (c:fast_merge_quick)))
 (if (null (read "c:hc")) (defun c:hc () (c:fast_merge_quick)))
 
-;; 3.1 å›¾å—é•œåƒåå­—æ™ºèƒ½ç©¿é€çº å (FZW / XFZ / CORRECTTEXT)
+;; 3.1 Í¼¿é¾µÏñ·´×ÖÖÇÄÜ´©Í¸¾ÀÆ« (FZW / XFZ / CORRECTTEXT)
 (defun c:FZW () (vl-cmdf "FZW"))
 (defun c:fzw () (vl-cmdf "FZW"))
 (defun c:XFZ () (vl-cmdf "FZW"))
 (defun c:xfz () (vl-cmdf "FZW"))
 
-;; 4. åŸä½ç¼–å—å…è¿›ç¼–è¾‘ç©¿é€æ‹‰ä¼¸ä¸ç§»åŠ¨ (XKB / XLS / XSTRETCH)
+;; 4. Ô­Î»±à¿éÃâ½ø±à¼­´©Í¸À­ÉìÓëÒÆ¶¯ (XKB / XLS / XSTRETCH)
 (defun c:XKB () (vl-cmdf "XSTRETCH"))
 (defun c:xkb () (vl-cmdf "XSTRETCH"))
 (defun c:XLS () (vl-cmdf "XSTRETCH"))
 (defun c:xls () (vl-cmdf "XSTRETCH"))
 
-;; 5. å—å†…å›¾å…ƒå½’0å±‚
+;; 5. ¿éÄÚÍ¼Ôª¹é0²ã
 (defun c:B0  () (c:BLOCK_LAYER_ZERO))
 (defun c:b0  () (c:BLOCK_LAYER_ZERO))
 (defun c:0B  () (c:BLOCK_LAYER_ZERO))
@@ -60,7 +60,7 @@
 (defun c:XGL () (c:BLOCK_LAYER_ZERO))
 (defun c:xgl () (c:BLOCK_LAYER_ZERO))
 
-;; 6. å±æ€§æ–‡å­—ç©¿é€ç§»åŠ¨
+;; 6. ÊôĞÔÎÄ×Ö´©Í¸ÒÆ¶¯
 (defun c:MW  () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:mw  () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:MY  () (c:UNIVERSAL_MOVE_TEXT))
@@ -70,13 +70,13 @@
 (defun c:XGA () (c:UNIVERSAL_MOVE_TEXT))
 (defun c:xga () (c:UNIVERSAL_MOVE_TEXT))
 
-;; 7. å®ä½“æ™ºèƒ½æ£€æµ‹
+;; 7. ÊµÌåÖÇÄÜ¼ì²â
 (defun c:TC  () (c:DETECT_ENTITY))
 (defun c:tc  () (c:DETECT_ENTITY))
 (defun c:XTC () (c:DETECT_ENTITY))
 (defun c:xtc () (c:DETECT_ENTITY))
 
-;; 8. å—å†…ç©¿é€åˆ é™¤ (å¿«æ·æŒ‡ä»¤ç›´é€š)
+;; 8. ¿éÄÚ´©Í¸É¾³ı (¿ì½İÖ¸ÁîÖ±Í¨)
 (defun c:XSC () (c:XY_BLOCK_ERASE))
 (defun c:xsc () (c:XY_BLOCK_ERASE))
 (defun c:KSC () (c:XY_BLOCK_ERASE))
@@ -84,7 +84,7 @@
 (defun c:BDE () (c:XY_BLOCK_ERASE))
 (defun c:bde () (c:XY_BLOCK_ERASE))
 
-;; 9. è§†å£å†»ç»“ä¸æ¢å¤
+;; 9. ÊÓ¿Ú¶³½áÓë»Ö¸´
 (defun c:XDJ () (vl-cmdf "XDJ"))
 (defun c:xdj () (vl-cmdf "XDJ"))
 (defun c:XJD () (vl-cmdf "XJD"))
@@ -92,7 +92,7 @@
 (defun c:XHF () (vl-cmdf "XHF"))
 (defun c:xhf () (vl-cmdf "XHF"))
 
-;; 10. å·¥å…·ç®±é¢æ¿ä¸è®¾ç½®
+;; 10. ¹¤¾ßÏäÃæ°åÓëÉèÖÃ
 (defun c:XYSZ () (c:XYPANEL))
 (defun c:xysz () (c:XYSZ))
 (defun c:ZYSZ () (c:XYSZ))
@@ -100,32 +100,31 @@
 (defun c:XGJ  () (c:XYSZ))
 (defun c:xgj  () (c:XYSZ))
 
-;; æ ¸å¿ƒç¨‹åºé›†ä¸å¿«æ·é”®çƒ­é‡è½½ (XCZ / RELOAD)
+;; ºËĞÄ³ÌĞò¼¯Óë¿ì½İ¼üÈÈÖØÔØ (XCZ / RELOAD)
 (defun c:XCZ ()
   (vl-catch-all-apply 'xy:load-latest-dll)
   (if (findfile "shortcuts.lsp") (load (findfile "shortcuts.lsp")))
   (if (findfile "autoload.lsp") (load (findfile "autoload.lsp")))
-  (vl-cmdf "_.XCZ")
-  (princ "\nâ˜… [XYå·¥å…·ç®±] æ ¸å¿ƒç¨‹åºé›†ä¸æ‰€æœ‰å¿«æ·é”®å·²æˆåŠŸç§’çº§çƒ­é‡è½½ï¼æ— éœ€é‡å¯ AutoCADï¼\n")
+  (princ "\n¡ï [XY¹¤¾ßÏä] ºËĞÄ³ÌĞò¼¯ÓëËùÓĞ¿ì½İ¼üÒÑ³É¹¦Ãë¼¶ÈÈÖØÔØ£¡ÎŞĞèÖØÆô AutoCAD£¡\n")
   (princ)
 )
 (defun c:xcz () (c:XCZ))
 (defun c:RELOAD () (c:XCZ))
 (defun c:reload () (c:XCZ))
 
-;; å¿«æ·é”®çƒ­é‡è½½
+;; ¿ì½İ¼üÈÈÖØÔØ
 (defun c:REKEY () (c:rekey))
 (defun c:rekey ( / sc )
   (setq sc (findfile "shortcuts.lsp"))
   (if (and sc (findfile sc))
     (load sc)
   )
-  (princ "\n[XYå·¥å…·ç®±] å¿«æ·é”®å·²å…¨éƒ¨åˆ·æ–°ç”Ÿæ•ˆï¼\n")
+  (princ "\n[XY¹¤¾ßÏä] ¿ì½İ¼üÒÑÈ«²¿Ë¢ĞÂÉúĞ§£¡\n")
   (princ)
 )
 
 
-;; 3.2 è§†å£å›¾å±‚æ ·å¼è¦†ç›– (SK / SKYS)
+;; 3.2 ÊÓ¿ÚÍ¼²ãÑùÊ½¸²¸Ç (SK / SKYS)
 (defun c:SK () (vl-cmdf "_.SK"))
 (defun c:sk () (c:SK))
 (defun c:SKYS () (vl-cmdf "_.SKYS"))
@@ -133,13 +132,13 @@
 (defun c:SKTC () (vl-cmdf "_.SKTC"))
 (defun c:sktc () (c:SKTC))
 
-;; 3.3 å•†ä¸šçº§åœ¨çº¿æ£€æµ‹æ›´æ–° (XGX / UPDATE)
+;; 3.3 ÉÌÒµ¼¶ÔÚÏß¼ì²â¸üĞÂ (XGX / UPDATE)
 (defun c:XGX () (vl-cmdf "_.XGX"))
 (defun c:xgx () (c:XGX))
 (defun c:UPDATE () (c:XGX))
 (defun c:update () (c:XGX))
 
-;; 3.4 æ™ºèƒ½æ–‡å­—é€‰æ‹©ä¸è¿‡æ»¤ (XTX / XSW / XTXD / XTXH / XTXC)
+;; 3.4 ÖÇÄÜÎÄ×ÖÑ¡ÔñÓë¹ıÂË (XTX / XSW / XTXD / XTXH / XTXC)
 (defun c:XTX () (vl-cmdf "_.XTX") (princ))
 (defun c:xtx () (c:XTX))
 (defun c:XSW () (vl-cmdf "_.XSW") (princ))
@@ -150,4 +149,16 @@
 (defun c:xtxh () (c:XTXH))
 (defun c:XTXC () (vl-cmdf "_.XTXC") (princ))
 (defun c:xtxc () (c:XTXC))
+
+;; 3.5 ÖÇÄÜÍ¼Ö½È±Ê§×ÖÌåÕï¶ÏÓëĞŞ¸´ (XZT / FONTFIX)
+(defun c:XZT ()
+  (setvar "USERS1" "XZT")
+  (vl-cmdf "_.XY_ATTMOD")
+  (princ)
+)
+(defun c:xzt () (c:XZT))
+(defun c:FONTFIX () (c:XZT))
+(defun c:fontfix () (c:XZT))
+(defun c:fontfix () (c:XZT))
+
 (princ)
