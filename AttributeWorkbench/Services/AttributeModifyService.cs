@@ -44,6 +44,8 @@ namespace AttributeWorkbench.Services
         public bool HasMultipleParts { get { return RelatedParts != null && RelatedParts.Count > 1; } }
         public string CombinedText { get; set; }
         public bool IsAlreadyMerged { get; set; }
+        public string CurrentLayer { get; set; }
+        public Autodesk.AutoCAD.Colors.Color CurrentColor { get; set; }
 
         public AttributeTargetInfo()
         {
@@ -123,6 +125,8 @@ namespace AttributeWorkbench.Services
                 Tag = attRef.Tag,
                 TextString = attRef.TextString,
                 CurrentHeight = attRef.Height,
+                CurrentLayer = attRef.Layer,
+                CurrentColor = attRef.Color,
                 PickedPoint = pickedPoint,
                 IsDynamicBlock = parentBlk.IsDynamicBlock,
                 BlockTransform = parentBlk.BlockTransform,
@@ -293,6 +297,142 @@ namespace AttributeWorkbench.Services
             }
 
             return syncCount;
+        }
+
+        /// <summary>
+        /// 批量更新属性文字的图层与颜色（支持母块定义与全图所有同名块联动）
+        /// </summary>
+        public static int ModifyAttributeLayerAndColor(Database db, AttributeTargetInfo target, string newLayer, Autodesk.AutoCAD.Colors.Color newColor, bool syncAllBlocks, HashSet<ObjectId> allowedBlockIds = null)
+        {
+            if (target == null || (string.IsNullOrEmpty(newLayer) && newColor == null)) return 0;
+            int syncCount = 0;
+
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                // 1. 若指定了图层且不存在，先自动安全创建图层
+                if (!string.IsNullOrEmpty(newLayer))
+                {
+                    LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+                    if (lt != null && !lt.Has(newLayer))
+                    {
+                        lt.UpgradeOpen();
+                        LayerTableRecord ltr = new LayerTableRecord();
+                        ltr.Name = newLayer;
+                        lt.Add(ltr);
+                        tr.AddNewlyCreatedDBObject(ltr, true);
+                    }
+                }
+
+                // 2. 确定需要修改的属性 Tag (若多部件未合并，整体换层换色)
+                HashSet<string> targetTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (target.HasMultipleParts)
+                {
+                    foreach (AttributePartInfo p in target.RelatedParts) targetTags.Add(p.Tag);
+                }
+                else
+                {
+                    targetTags.Add(target.Tag);
+                }
+
+                // 3. 修改当前选中的图块内的属性
+                BlockReference currentBlk = tr.GetObject(target.ParentBlockId, OpenMode.ForRead) as BlockReference;
+                if (currentBlk != null)
+                {
+                    foreach (ObjectId attId in currentBlk.AttributeCollection)
+                    {
+                        AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                        if (att != null && targetTags.Contains(att.Tag))
+                        {
+                            att.UpgradeOpen();
+                            if (!string.IsNullOrEmpty(newLayer)) att.Layer = newLayer;
+                            if (newColor != null) att.Color = newColor;
+                            att.RecordGraphicsModified(true);
+                            if (attId == target.AttributeId) syncCount++;
+                        }
+                    }
+                }
+
+                // 若不联动全图同名块，提交并返回
+                if (!syncAllBlocks)
+                {
+                    tr.Commit();
+                    if (!string.IsNullOrEmpty(newLayer)) target.CurrentLayer = newLayer;
+                    if (newColor != null) target.CurrentColor = newColor;
+                    return syncCount > 0 ? 1 : 0;
+                }
+
+                // 4. 同步更新母块定义中的 AttributeDefinition（锁定后续 ATTSYNC 不丢失图层颜色）
+                BlockTableRecord btr = tr.GetObject(target.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
+                if (btr != null)
+                {
+                    foreach (ObjectId entId in btr)
+                    {
+                        AttributeDefinition attDef = tr.GetObject(entId, OpenMode.ForRead) as AttributeDefinition;
+                        if (attDef != null && targetTags.Contains(attDef.Tag))
+                        {
+                            attDef.UpgradeOpen();
+                            if (!string.IsNullOrEmpty(newLayer)) attDef.Layer = newLayer;
+                            if (newColor != null) attDef.Color = newColor;
+                            attDef.RecordGraphicsModified(true);
+                        }
+                    }
+                }
+
+                // 5. 同步更新全图所有同名块实例（若有 allowedBlockIds 框选范围限定，则只更新限定范围内）
+                foreach (ObjectId refId in target.AllBlockReferenceIds)
+                {
+                    if (refId == target.ParentBlockId) continue;
+                    if (allowedBlockIds != null && !allowedBlockIds.Contains(refId)) continue;
+
+                    BlockReference bRef = tr.GetObject(refId, OpenMode.ForRead) as BlockReference;
+                    if (bRef == null) continue;
+
+                    bool touched = false;
+                    foreach (ObjectId attId in bRef.AttributeCollection)
+                    {
+                        AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                        if (att != null && targetTags.Contains(att.Tag))
+                        {
+                            att.UpgradeOpen();
+                            if (!string.IsNullOrEmpty(newLayer)) att.Layer = newLayer;
+                            if (newColor != null) att.Color = newColor;
+                            att.RecordGraphicsModified(true);
+                            touched = true;
+                        }
+                    }
+                    if (touched) syncCount++;
+                }
+
+                tr.Commit();
+                if (!string.IsNullOrEmpty(newLayer)) target.CurrentLayer = newLayer;
+                if (newColor != null) target.CurrentColor = newColor;
+            }
+
+            return syncCount;
+        }
+
+        /// <summary>
+        /// 获取图纸中所有图层名称列表（首字母排序）
+        /// </summary>
+        public static List<string> GetAllLayerNames(Database db)
+        {
+            List<string> list = new List<string>();
+            if (db == null) return list;
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                LayerTable lt = tr.GetObject(db.LayerTableId, OpenMode.ForRead) as LayerTable;
+                if (lt != null)
+                {
+                    foreach (ObjectId lid in lt)
+                    {
+                        LayerTableRecord ltr = tr.GetObject(lid, OpenMode.ForRead) as LayerTableRecord;
+                        if (ltr != null) list.Add(ltr.Name);
+                    }
+                }
+                tr.Commit();
+            }
+            list.Sort(StringComparer.OrdinalIgnoreCase);
+            return list;
         }
 
         /// <summary>

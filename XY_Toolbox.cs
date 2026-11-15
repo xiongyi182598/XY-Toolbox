@@ -339,7 +339,7 @@ namespace XY_Deepening_Toolbox
 
     public class Commands
     {
-        public static readonly int CurrentBuildVersion = 187;
+        public static readonly int CurrentBuildVersion = 189;
 
         public static string GetApplicationDirectory()
         {

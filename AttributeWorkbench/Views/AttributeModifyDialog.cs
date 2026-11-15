@@ -81,6 +81,134 @@ namespace AttributeWorkbench.Views
             <Setter Property=""VerticalContentAlignment"" Value=""Center""/>
             <Setter Property=""Cursor"" Value=""Hand""/>
         </Style>
+        <!-- 纯深色可编辑 ComboBox 模板 (彻底消灭系统 Aero2 默认白色 ToggleButton 白条) -->
+        <ControlTemplate x:Key=""DarkEditableComboBoxTemplate"" TargetType=""{x:Type ComboBox}"">
+            <Grid x:Name=""templateRoot"" SnapsToDevicePixels=""True"" TextElement.Foreground=""#FFFFFF"">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width=""*""/>
+                    <ColumnDefinition MinWidth=""24"" Width=""24""/>
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name=""mainBorder"" Grid.ColumnSpan=""2""
+                        Background=""#10131A""
+                        BorderBrush=""#4C566A""
+                        BorderThickness=""1""
+                        CornerRadius=""4""/>
+
+                <TextBox x:Name=""PART_EditableTextBox"" Grid.Column=""0""
+                         Background=""Transparent""
+                         Foreground=""#FFFFFF""
+                         FontWeight=""Bold""
+                         FontSize=""12""
+                         BorderThickness=""0""
+                         Padding=""8,4""
+                         VerticalContentAlignment=""Center""
+                         CaretBrush=""#FFFFFF""
+                         SelectionBrush=""#88C0D0""/>
+
+                <ToggleButton Grid.Column=""1"" Background=""Transparent"" BorderThickness=""0"" Focusable=""False""
+                              IsChecked=""{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"">
+                    <Path Data=""M 0 0 L 4 4 L 8 0 Z"" Fill=""#88C0D0"" HorizontalAlignment=""Center"" VerticalAlignment=""Center""/>
+                </ToggleButton>
+
+                <Popup x:Name=""PART_Popup"" AllowsTransparency=""True"" Grid.ColumnSpan=""2""
+                       IsOpen=""{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}""
+                       Placement=""Bottom"" PopupAnimation=""Slide"">
+                    <Border Background=""#202534"" BorderBrush=""#4C566A"" BorderThickness=""1"" CornerRadius=""4"" MaxHeight=""260"" MinWidth=""{Binding ActualWidth, ElementName=templateRoot}"">
+                        <ScrollViewer SnapsToDevicePixels=""True"" KeyboardNavigation.DirectionalNavigation=""Contained"">
+                            <StackPanel IsItemsHost=""True"" KeyboardNavigation.DirectionalNavigation=""Contained""/>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+
+            <ControlTemplate.Triggers>
+                <Trigger Property=""IsMouseOver"" Value=""True"">
+                    <Setter TargetName=""mainBorder"" Property=""BorderBrush"" Value=""#88C0D0""/>
+                </Trigger>
+                <Trigger Property=""IsKeyboardFocusWithin"" Value=""True"">
+                    <Setter TargetName=""mainBorder"" Property=""BorderBrush"" Value=""#81A1C1""/>
+                    <Setter TargetName=""mainBorder"" Property=""BorderThickness"" Value=""1.5""/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- 纯深色普通只读 ComboBox 模板 -->
+        <ControlTemplate x:Key=""DarkComboBoxTemplate"" TargetType=""{x:Type ComboBox}"">
+            <Grid x:Name=""templateRoot"" SnapsToDevicePixels=""True"" TextElement.Foreground=""#FFFFFF"">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width=""*""/>
+                    <ColumnDefinition MinWidth=""24"" Width=""24""/>
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name=""mainBorder"" Grid.ColumnSpan=""2""
+                        Background=""#10131A""
+                        BorderBrush=""#4C566A""
+                        BorderThickness=""1""
+                        CornerRadius=""4""/>
+
+                <ContentPresenter Grid.Column=""0""
+                                  Content=""{TemplateBinding SelectionBoxItem}""
+                                  ContentTemplate=""{TemplateBinding SelectionBoxItemTemplate}""
+                                  ContentTemplateSelector=""{TemplateBinding ItemTemplateSelector}""
+                                  VerticalAlignment=""Center""
+                                  Margin=""8,0,0,0""/>
+
+                <ToggleButton Grid.Column=""1"" Background=""Transparent"" BorderThickness=""0"" Focusable=""False""
+                              IsChecked=""{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"">
+                    <Path Data=""M 0 0 L 4 4 L 8 0 Z"" Fill=""#88C0D0"" HorizontalAlignment=""Center"" VerticalAlignment=""Center""/>
+                </ToggleButton>
+
+                <Popup x:Name=""PART_Popup"" AllowsTransparency=""True"" Grid.ColumnSpan=""2""
+                       IsOpen=""{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}""
+                       Placement=""Bottom"" PopupAnimation=""Slide"">
+                    <Border Background=""#202534"" BorderBrush=""#4C566A"" BorderThickness=""1"" CornerRadius=""4"" MaxHeight=""240"" MinWidth=""{Binding ActualWidth, ElementName=templateRoot}"">
+                        <ScrollViewer SnapsToDevicePixels=""True"" KeyboardNavigation.DirectionalNavigation=""Contained"">
+                            <StackPanel IsItemsHost=""True"" KeyboardNavigation.DirectionalNavigation=""Contained""/>
+                        </ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+
+            <ControlTemplate.Triggers>
+                <Trigger Property=""IsMouseOver"" Value=""True"">
+                    <Setter TargetName=""mainBorder"" Property=""BorderBrush"" Value=""#88C0D0""/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- 全局下拉项样式 -->
+        <Style TargetType=""ComboBoxItem"">
+            <Setter Property=""Background"" Value=""#202534""/>
+            <Setter Property=""Foreground"" Value=""#FFFFFF""/>
+            <Setter Property=""Padding"" Value=""8,6""/>
+            <Setter Property=""FontWeight"" Value=""SemiBold""/>
+            <Style.Triggers>
+                <Trigger Property=""IsHighlighted"" Value=""True"">
+                    <Setter Property=""Background"" Value=""#2D3748""/>
+                    <Setter Property=""Foreground"" Value=""#88C0D0""/>
+                </Trigger>
+                <Trigger Property=""IsSelected"" Value=""True"">
+                    <Setter Property=""Background"" Value=""#3B4252""/>
+                    <Setter Property=""Foreground"" Value=""#A3BE8C""/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType=""ComboBox"">
+            <Setter Property=""Background"" Value=""#10131A""/>
+            <Setter Property=""Foreground"" Value=""#FFFFFF""/>
+            <Setter Property=""BorderBrush"" Value=""#4C566A""/>
+            <Setter Property=""Padding"" Value=""6,4""/>
+            <Setter Property=""FontWeight"" Value=""SemiBold""/>
+            <Setter Property=""KeyboardNavigation.DirectionalNavigation"" Value=""Contained""/>
+            <Setter Property=""Template"" Value=""{StaticResource DarkComboBoxTemplate}""/>
+            <Style.Triggers>
+                <Trigger Property=""IsEditable"" Value=""True"">
+                    <Setter Property=""Template"" Value=""{StaticResource DarkEditableComboBoxTemplate}""/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <StackPanel Margin=""14"">
         <!-- 0. 顶部属性信息卡 -->
@@ -129,6 +257,34 @@ namespace AttributeWorkbench.Views
                 <Button x:Name=""btnApplyHeight"" Content=""⚡ 应用字高"" Grid.Column=""6"" Height=""36""
                         Style=""{StaticResource BtnSuccess}"" FontSize=""13""/>
             </Grid>
+        </Border>
+
+        <!-- 1.1 编号图层与颜色调节 -->
+        <Border Background=""#202534"" BorderBrush=""#323B4E"" BorderThickness=""1"" CornerRadius=""6""
+                Padding=""12,10"" Margin=""0,0,0,8"">
+            <StackPanel>
+                <Grid Margin=""0,0,0,8"">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width=""Auto""/>
+                        <ColumnDefinition Width=""*""/>
+                        <ColumnDefinition Width=""34""/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text=""编号图层:"" Foreground=""#ECEFF4"" FontWeight=""SemiBold"" FontSize=""12"" VerticalAlignment=""Center"" Grid.Column=""0"" Margin=""0,0,8,0""/>
+                    <ComboBox x:Name=""cboLayer"" Grid.Column=""1"" Height=""30"" IsEditable=""True"" FontSize=""12"" VerticalContentAlignment=""Center""/>
+                    <Button x:Name=""btnPickLayer"" Grid.Column=""2"" Content=""⌖"" ToolTip=""在图纸中吸取目标图层"" Height=""30"" Margin=""4,0,0,0"" Style=""{StaticResource BtnBase}"" FontSize=""14"" FontWeight=""Bold""/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width=""Auto""/>
+                        <ColumnDefinition Width=""*""/>
+                        <ColumnDefinition Width=""10""/>
+                        <ColumnDefinition Width=""110""/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text=""编号颜色:"" Foreground=""#ECEFF4"" FontWeight=""SemiBold"" FontSize=""12"" VerticalAlignment=""Center"" Grid.Column=""0"" Margin=""0,0,8,0""/>
+                    <ComboBox x:Name=""cboColor"" Grid.Column=""1"" Height=""32"" FontSize=""12"" VerticalContentAlignment=""Center""/>
+                    <Button x:Name=""btnApplyLayerColor"" Content=""⚡ 应用层与色"" Grid.Column=""3"" Height=""32"" Style=""{StaticResource BtnSuccess}"" FontSize=""12""/>
+                </Grid>
+            </StackPanel>
         </Border>
 
         <!-- 2. 门窗复合编号排版 (仅在检测到物理相邻的复合多段时激活) -->
@@ -219,6 +375,11 @@ namespace AttributeWorkbench.Views
         private TextBox _txtNewHeight;
         private Button _btnApplyHeight;
 
+        private ComboBox _cboLayer;
+        private Button _btnPickLayer;
+        private ComboBox _cboColor;
+        private Button _btnApplyLayerColor;
+
         private Border _borderMultiPart;
         private TextBlock _txtMultiPartPreview;
         private RadioButton _radScheme1, _radScheme2;
@@ -259,6 +420,13 @@ namespace AttributeWorkbench.Views
             _txtNewHeight    = (TextBox)_window.FindName("txtNewHeight");
             _btnApplyHeight  = (Button)_window.FindName("btnApplyHeight");
 
+            _cboLayer           = (ComboBox)_window.FindName("cboLayer");
+            _btnPickLayer       = (Button)_window.FindName("btnPickLayer");
+            _cboColor           = (ComboBox)_window.FindName("cboColor");
+            _btnApplyLayerColor = (Button)_window.FindName("btnApplyLayerColor");
+
+            InitColorOptions();
+
             _borderMultiPart            = (Border)_window.FindName("borderMultiPart");
             _txtMultiPartPreview        = (TextBlock)_window.FindName("txtMultiPartPreview");
             _radScheme1                 = (RadioButton)_window.FindName("radScheme1");
@@ -284,6 +452,10 @@ namespace AttributeWorkbench.Views
                     ApplyInputHeight();
                 }
             };
+
+            _btnPickLayer.Click       += BtnPickLayer_Click;
+            _btnApplyLayerColor.Click += delegate { ApplyLayerAndColor(); };
+            _cboColor.SelectionChanged += CboColor_SelectionChanged;
 
             _btnApplyScheme.Click    += delegate { ExecuteMultiPartScheme(); };
             _btnStartMoveJig.Click   += BtnStartMoveJig_Click;
@@ -331,7 +503,234 @@ namespace AttributeWorkbench.Views
                 _borderMultiPart.Visibility = Visibility.Collapsed;
                 if (_pnlMovePartsOption != null) _pnlMovePartsOption.Visibility = Visibility.Collapsed;
             }
+
+            // 填充图层下拉列表
+            if (_cboLayer != null && _doc != null)
+            {
+                string curLayer = _target.CurrentLayer ?? "";
+                _cboLayer.Items.Clear();
+                try
+                {
+                    List<string> layers = AttributeModifyService.GetAllLayerNames(_doc.Database);
+                    foreach (string lyr in layers)
+                    {
+                        _cboLayer.Items.Add(lyr);
+                    }
+                }
+                catch { }
+                _cboLayer.Text = curLayer;
+            }
+
+            // 选中当前颜色
+            if (_cboColor != null && _target.CurrentColor != null)
+            {
+                _isHandlingColorChange = true;
+                try
+                {
+                    bool matched = false;
+                    for (int i = 0; i < _cboColor.Items.Count; i++)
+                    {
+                        CadColorItem item = _cboColor.Items[i] as CadColorItem;
+                        if (item != null && item.Color != null)
+                        {
+                            if (item.Color.ColorMethod == _target.CurrentColor.ColorMethod &&
+                                item.Color.ColorIndex == _target.CurrentColor.ColorIndex)
+                            {
+                                _cboColor.SelectedIndex = i;
+                                matched = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!matched)
+                    {
+                        CadColorItem customItem = new CadColorItem
+                        {
+                            DisplayName = string.Format("🎨 自定义 ({0})", _target.CurrentColor.ColorNameForDisplay),
+                            Color = _target.CurrentColor,
+                            IsCustomTrigger = false
+                        };
+                        int insertIdx = Math.Max(0, _cboColor.Items.Count - 1);
+                        _cboColor.Items.Insert(insertIdx, customItem);
+                        _cboColor.SelectedItem = customItem;
+                    }
+                }
+                catch { }
+                finally
+                {
+                    _isHandlingColorChange = false;
+                }
+            }
         }
+
+        #region 图层与颜色处理逻辑
+
+        private class CadColorItem
+        {
+            public string DisplayName { get; set; }
+            public Autodesk.AutoCAD.Colors.Color Color { get; set; }
+            public bool IsCustomTrigger { get; set; }
+            public override string ToString() { return DisplayName; }
+        }
+
+        private bool _isHandlingColorChange = false;
+
+        private void InitColorOptions()
+        {
+            if (_cboColor == null) return;
+            _cboColor.Items.Clear();
+
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "ByLayer (随层)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByLayer, 256) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "ByBlock (随块)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByBlock, 0) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "1 - 红色 (Red)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 1) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "2 - 黄色 (Yellow)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 2) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "3 - 绿色 (Green)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 3) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "4 - 青色 (Cyan)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 4) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "5 - 蓝色 (Blue)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 5) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "6 - 洋红 (Magenta)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 6) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "7 - 白/黑 (White)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 7) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "251 - 灰度 (Gray)", Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 251) });
+            _cboColor.Items.Add(new CadColorItem { DisplayName = "🎨 更多颜色...", Color = null, IsCustomTrigger = true });
+
+            _cboColor.SelectedIndex = 0;
+        }
+
+        private void CboColor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isHandlingColorChange || _cboColor == null) return;
+            CadColorItem item = _cboColor.SelectedItem as CadColorItem;
+            if (item != null && item.IsCustomTrigger)
+            {
+                _isHandlingColorChange = true;
+                try
+                {
+                    Autodesk.AutoCAD.Windows.ColorDialog dlg = new Autodesk.AutoCAD.Windows.ColorDialog();
+                    if (_target != null && _target.CurrentColor != null)
+                    {
+                        try { dlg.Color = _target.CurrentColor; } catch { }
+                    }
+                    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    {
+                        CadColorItem customItem = new CadColorItem
+                        {
+                            DisplayName = string.Format("🎨 自定义 ({0})", dlg.Color.ColorNameForDisplay),
+                            Color = dlg.Color,
+                            IsCustomTrigger = false
+                        };
+                        int insertIdx = Math.Max(0, _cboColor.Items.Count - 1);
+                        _cboColor.Items.Insert(insertIdx, customItem);
+                        _cboColor.SelectedItem = customItem;
+                    }
+                    else
+                    {
+                        _cboColor.SelectedIndex = 0;
+                    }
+                }
+                catch { }
+                finally
+                {
+                    _isHandlingColorChange = false;
+                }
+            }
+        }
+
+        private void BtnPickLayer_Click(object sender, RoutedEventArgs e)
+        {
+            if (_doc == null) return;
+            _window.Visibility = Visibility.Hidden;
+            try
+            {
+                PromptEntityOptions peo = new PromptEntityOptions("\n>> 请在图纸中点选任意参考图元以提取目标图层 (按ESC取消): ");
+                PromptEntityResult per = _doc.Editor.GetEntity(peo);
+                if (per.Status == PromptStatus.OK)
+                {
+                    using (Transaction tr = _doc.Database.TransactionManager.StartTransaction())
+                    {
+                        Entity ent = tr.GetObject(per.ObjectId, OpenMode.ForRead) as Entity;
+                        if (ent != null)
+                        {
+                            string pickedLayer = ent.Layer;
+                            _cboLayer.Text = pickedLayer;
+                            _doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 已成功提取目标图层: 【{0}】\n", pickedLayer));
+                        }
+                        tr.Commit();
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                _doc.Editor.WriteMessage("\n[提示] 拾取图层取消或未完成: " + ex.Message + "\n");
+            }
+            finally
+            {
+                _window.Visibility = Visibility.Visible;
+                _window.Activate();
+            }
+        }
+
+        private void ApplyLayerAndColor()
+        {
+            if (_target == null || _doc == null) return;
+            string newLayer = _cboLayer.Text != null ? _cboLayer.Text.Trim() : null;
+            Autodesk.AutoCAD.Colors.Color newColor = null;
+            CadColorItem selColor = _cboColor.SelectedItem as CadColorItem;
+            if (selColor != null && !selColor.IsCustomTrigger)
+            {
+                newColor = selColor.Color;
+            }
+
+            if (string.IsNullOrEmpty(newLayer) && newColor == null)
+            {
+                MessageBox.Show("请选择或输入有效的图层名或颜色！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            bool syncAll = (_radSyncAll.IsChecked == true);
+            bool useWindowSel = (_chkWindowSelect.IsChecked == true);
+            HashSet<ObjectId> allowedIds = null;
+
+            if (syncAll && useWindowSel)
+            {
+                _window.Visibility = Visibility.Hidden;
+                try
+                {
+                    PromptSelectionOptions pso = new PromptSelectionOptions();
+                    pso.MessageForAdding = "\n>> 请框选需要限定同步图层颜色的门窗图块范围 (回车同步全图): ";
+                    PromptSelectionResult psr = _doc.Editor.GetSelection(pso);
+                    if (psr.Status == PromptStatus.OK && psr.Value != null)
+                    {
+                        allowedIds = new HashSet<ObjectId>(psr.Value.GetObjectIds());
+                    }
+                }
+                finally
+                {
+                    _window.Visibility = Visibility.Visible;
+                    _window.Activate();
+                }
+            }
+
+            try
+            {
+                int count = 0;
+                using (_doc.LockDocument())
+                {
+                    count = AttributeModifyService.ModifyAttributeLayerAndColor(_doc.Database, _target, newLayer, newColor, syncAll, allowedIds);
+                }
+                _doc.Editor.Regen();
+                string scopeNote = syncAll
+                    ? string.Format("（同步更新了 {0} 处图块{1}）", count, useWindowSel && allowedIds != null ? "框选范围" : "")
+                    : "（仅当前单图块）";
+                string layerMsg = !string.IsNullOrEmpty(newLayer) ? string.Format("图层: [{0}] ", newLayer) : "";
+                string colorMsg = (newColor != null && selColor != null) ? string.Format("颜色: [{0}] ", selColor.DisplayName) : "";
+                _doc.Editor.WriteMessage(string.Format("\n[XY工具箱] 属性【{0}】{1}{2}已成功应用！{3}\n", _target.Tag, layerMsg, colorMsg, scopeNote));
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox.Show("修改图层与颜色失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        #endregion
 
         private void ApplyInputHeight()
         {
