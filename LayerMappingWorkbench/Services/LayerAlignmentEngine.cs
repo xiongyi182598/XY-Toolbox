@@ -29,7 +29,7 @@ namespace LayerMappingWorkbench.Services
         {
             Name = string.Empty;
             Color = Colors.White;
-            ColorIndex = 7;
+            ColorIndex = 0;
             Linetype = "Continuous";
             EntityCount = 0;
         }
@@ -238,17 +238,33 @@ namespace LayerMappingWorkbench.Services
                     {
                         ApplyTargetVisualProps(item, hitRule.TargetLayer, targetLayerMap);
                     }
-                    else
+
+                    // 规则库固化颜色优先于默认白
+                    if (!string.IsNullOrEmpty(hitRule.TargetColorHex))
                     {
-                        if (!string.IsNullOrEmpty(hitRule.TargetColorHex))
+                        System.Windows.Media.Color parsedColor = ParseColorHex(hitRule.TargetColorHex);
+                        if (parsedColor != Colors.White || item.TargetColor == Colors.White || item.TargetColor == System.Windows.Media.Color.FromRgb(100, 110, 125))
                         {
-                            item.TargetColor = ParseColorHex(hitRule.TargetColorHex);
-                        }
-                        if (!string.IsNullOrEmpty(hitRule.TargetLinetype))
-                        {
-                            item.TargetLinetype = hitRule.TargetLinetype;
+                            item.TargetColor = parsedColor;
                         }
                     }
+                    if (!string.IsNullOrEmpty(hitRule.TargetLinetype) && !string.Equals(hitRule.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        item.TargetLinetype = hitRule.TargetLinetype;
+                    }
+
+                    // 若既无外部DWG定义也未指定特殊颜色，智能继承源图层的颜色与线型
+                    if ((item.TargetColor == Colors.White && src.Color != Colors.White && (targetLayerMap == null || !targetLayerMap.ContainsKey(hitRule.TargetLayer))) || item.TargetColor == System.Windows.Media.Color.FromRgb(100, 110, 125))
+                    {
+                        item.TargetColor = src.Color;
+                    }
+                    if ((string.IsNullOrEmpty(item.TargetLinetype) || string.Equals(item.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase)) &&
+                        !string.IsNullOrEmpty(src.Linetype) && !string.Equals(src.Linetype, "Continuous", StringComparison.OrdinalIgnoreCase) &&
+                        (targetLayerMap == null || !targetLayerMap.ContainsKey(hitRule.TargetLayer)))
+                    {
+                        item.TargetLinetype = src.Linetype;
+                    }
+
                     result.Add(item);
                     continue;
                 }

@@ -78,35 +78,27 @@ namespace AttributeWorkbench.Services
             BlockTableRecord btr = tr.GetObject(parentBlk.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
             if (btr == null) return null;
 
-            AttributeTargetInfo info = new AttributeTargetInfo
-            {
-                AttributeId = attRefId,
-                ParentBlockId = parentBlk.ObjectId,
-                BlockTableRecordId = btr.ObjectId,
-                BlockName = btr.Name,
-                Tag = attRef.Tag,
-                TextString = attRef.TextString,
-                CurrentHeight = attRef.Height,
-                PickedPoint = pickedPoint,
-                IsDynamicBlock = parentBlk.IsDynamicBlock,
-                BlockTransform = parentBlk.BlockTransform
-            };
+            ObjectId btrId = btr.ObjectId;
+            string blockName = btr.Name;
 
             // 收集全图所有同名块引用（包含模型空间与所有布局图纸空间）
+            HashSet<ObjectId> allRefIds = new HashSet<ObjectId>();
             foreach (ObjectId id in btr.GetBlockReferenceIds(true, true))
             {
-                info.AllBlockReferenceIds.Add(id);
+                allRefIds.Add(id);
             }
 
-            // 支持动态块匿名派生实例 (*U...)
+            // 支持动态块匿名派生实例 (*U...) 并定位母块定义 DynamicBlockTableRecord
             if (parentBlk.IsDynamicBlock)
             {
                 BlockTableRecord dynBtr = tr.GetObject(parentBlk.DynamicBlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
                 if (dynBtr != null)
                 {
+                    btrId = dynBtr.ObjectId;
+                    blockName = dynBtr.Name;
                     foreach (ObjectId id in dynBtr.GetBlockReferenceIds(true, true))
                     {
-                        info.AllBlockReferenceIds.Add(id);
+                        allRefIds.Add(id);
                     }
                     foreach (ObjectId anonId in dynBtr.GetAnonymousBlockIds())
                     {
@@ -115,35 +107,62 @@ namespace AttributeWorkbench.Services
                         {
                             foreach (ObjectId id in anonBtr.GetBlockReferenceIds(true, true))
                             {
-                                info.AllBlockReferenceIds.Add(id);
+                                allRefIds.Add(id);
                             }
                         }
                     }
                 }
             }
 
-            // 自动侦测并收集同块内的所有可见有效属性部件 (天正门窗多段编号如 FM / 乙 / 1023)
+            AttributeTargetInfo info = new AttributeTargetInfo
+            {
+                AttributeId = attRefId,
+                ParentBlockId = parentBlk.ObjectId,
+                BlockTableRecordId = btrId,
+                BlockName = blockName,
+                Tag = attRef.Tag,
+                TextString = attRef.TextString,
+                CurrentHeight = attRef.Height,
+                PickedPoint = pickedPoint,
+                IsDynamicBlock = parentBlk.IsDynamicBlock,
+                BlockTransform = parentBlk.BlockTransform,
+                AllBlockReferenceIds = allRefIds
+            };
+
+            // 自动侦测并收集同块内的复合属性部件 (如天正门窗多段编号 FM / 乙 / 1023)
+            // 必须与当前点选属性处于物理相邻范围且字高相近，彻底杜绝把图框等不相关属性混淆
             List<AttributePartInfo> candidateParts = new List<AttributePartInfo>();
             int origIdx = 0;
+            Point3d refPos = attRef.Justify == AttachmentPoint.BaseLeft ? attRef.Position : (attRef.AlignmentPoint != Point3d.Origin ? attRef.AlignmentPoint : attRef.Position);
+
             foreach (ObjectId attId in parentBlk.AttributeCollection)
             {
                 AttributeReference a = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
                 if (a == null) continue;
                 if (!a.Invisible && !string.IsNullOrEmpty(a.TextString) && a.TextString.Trim().Length > 0)
                 {
-                    candidateParts.Add(new AttributePartInfo
+                    Point3d aPos = a.Justify == AttachmentPoint.BaseLeft ? a.Position : (a.AlignmentPoint != Point3d.Origin ? a.AlignmentPoint : a.Position);
+                    double dist = aPos.DistanceTo(refPos);
+                    // 门窗复合编号间距紧密贴合（通常在 8 倍字高以内），字高比例兼容各种级配字高
+                    double maxDist = Math.Max(Math.Max(attRef.Height, a.Height) * 8.0, 100.0);
+                    bool isNearby = (attId == attRefId) || (dist <= maxDist && Math.Abs(a.Height - attRef.Height) <= Math.Max(attRef.Height, a.Height) * 0.8);
+
+                    if (isNearby)
                     {
-                        AttributeId = attId,
-                        Tag = a.Tag,
-                        TextString = a.TextString,
-                        Position = a.Position,
-                        AlignmentPoint = a.AlignmentPoint,
-                        Height = a.Height,
-                        Rotation = a.Rotation,
-                        WidthFactor = a.WidthFactor > 0 ? a.WidthFactor : 0.7,
-                        Invisible = a.Invisible,
-                        OriginalIndex = origIdx++
-                    });
+                        candidateParts.Add(new AttributePartInfo
+                        {
+                            AttributeId = attId,
+                            Tag = a.Tag,
+                            TextString = a.TextString,
+                            Position = a.Position,
+                            AlignmentPoint = (a.Justify == AttachmentPoint.BaseLeft) ? a.Position : (a.AlignmentPoint != Point3d.Origin ? a.AlignmentPoint : a.Position),
+                            Height = a.Height,
+                            Rotation = a.Rotation,
+                            WidthFactor = a.WidthFactor > 0 ? a.WidthFactor : 0.7,
+                            Invisible = a.Invisible,
+                            OriginalIndex = origIdx++
+                        });
+                    }
                 }
             }
 
@@ -210,8 +229,9 @@ namespace AttributeWorkbench.Services
                         if (att != null && targetTags.Contains(att.Tag))
                         {
                             att.UpgradeOpen();
+                            try { att.LockPositionInBlock = false; } catch { }
                             att.Height = newHeight;
-                            att.AdjustAlignment(db);
+                            SafeAdjustAlignment(att, db);
                             att.RecordGraphicsModified(true);
                             if (attId == target.AttributeId) syncCount++;
                         }
@@ -237,7 +257,7 @@ namespace AttributeWorkbench.Services
                         {
                             attDef.UpgradeOpen();
                             attDef.Height = newHeight;
-                            attDef.AdjustAlignment(db);
+                            SafeAdjustAlignment(attDef, db);
                             attDef.RecordGraphicsModified(true);
                         }
                     }
@@ -258,8 +278,9 @@ namespace AttributeWorkbench.Services
                         if (att != null && targetTags.Contains(att.Tag))
                         {
                             att.UpgradeOpen();
+                            try { att.LockPositionInBlock = false; } catch { }
                             att.Height = newHeight;
-                            att.AdjustAlignment(db);
+                            SafeAdjustAlignment(att, db);
                             att.RecordGraphicsModified(true);
                             touched = true;
                         }
@@ -294,51 +315,70 @@ namespace AttributeWorkbench.Services
             {
                 // 1. 修改当前图块
                 BlockReference currentBlk = tr.GetObject(target.ParentBlockId, OpenMode.ForRead) as BlockReference;
-                if (currentBlk != null)
-                {
-                    AttributeReference primAtt = null;
-                    List<AttributeReference> secAtts = new List<AttributeReference>();
+                if (currentBlk == null) return 0;
 
-                    foreach (ObjectId attId in currentBlk.AttributeCollection)
+                AttributeReference primAtt = null;
+                List<AttributeReference> secAtts = new List<AttributeReference>();
+
+                foreach (ObjectId attId in currentBlk.AttributeCollection)
+                {
+                    AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                    if (att == null) continue;
+                    if (string.Equals(att.Tag, primaryTag, StringComparison.OrdinalIgnoreCase))
                     {
-                        AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                        if (att == null) continue;
-                        if (string.Equals(att.Tag, primaryTag, StringComparison.OrdinalIgnoreCase))
+                        primAtt = att;
+                    }
+                    else
+                    {
+                        foreach (string sTag in secondaryTags)
                         {
-                            primAtt = att;
-                        }
-                        else
-                        {
-                            foreach (string sTag in secondaryTags)
+                            if (string.Equals(att.Tag, sTag, StringComparison.OrdinalIgnoreCase))
                             {
-                                if (string.Equals(att.Tag, sTag, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    secAtts.Add(att);
-                                    break;
-                                }
+                                secAtts.Add(att);
+                                break;
                             }
                         }
                     }
-
-                    if (primAtt != null)
-                    {
-                        primAtt.UpgradeOpen();
-                        primAtt.TextString = target.CombinedText;
-                        primAtt.Height = target.CurrentHeight;
-                        primAtt.Invisible = false;
-                        primAtt.AdjustAlignment(db);
-                        primAtt.RecordGraphicsModified(true);
-
-                        foreach (AttributeReference sAtt in secAtts)
-                        {
-                            sAtt.UpgradeOpen();
-                            sAtt.TextString = "";
-                            sAtt.Invisible = true;
-                            sAtt.RecordGraphicsModified(true);
-                        }
-                        syncCount++;
-                    }
                 }
+
+                if (primAtt == null) return 0;
+
+                primAtt.UpgradeOpen();
+                primAtt.LockPositionInBlock = false;
+                primAtt.TextString = target.CombinedText;
+                primAtt.Height = target.CurrentHeight;
+                primAtt.Invisible = false;
+                try { primAtt.AdjustAlignment(db); } catch { }
+                primAtt.RecordGraphicsModified(true);
+
+                foreach (AttributeReference sAtt in secAtts)
+                {
+                    sAtt.UpgradeOpen();
+                    sAtt.TextString = "";
+                    sAtt.Invisible = true;
+                    sAtt.RecordGraphicsModified(true);
+                }
+                syncCount++;
+
+                // 关键核心修复：把 target 对象的指针与标签彻底重定向到合并后的主属性！
+                // 杜绝后续平移时由于 target 仍指着被清空的辅助属性导致主文字完全不移动的假死现象！
+                target.Tag = primAtt.Tag;
+                target.AttributeId = primAtt.ObjectId;
+
+                // 计算合并后文字在当前门块中的局部视觉中心 (Local Center)
+                Point3d primAnchor = GetTextAnchor(primAtt);
+                double primH = target.CurrentHeight > 0.001 ? target.CurrentHeight : 200.0;
+                double primWf = primAtt.WidthFactor > 0.01 ? primAtt.WidthFactor : 0.7;
+                double primLen = EstimateTextLength(target.CombinedText, primH, primWf);
+                double primRot = primAtt.Rotation;
+                Vector3d primDir = new Vector3d(Math.Cos(primRot), Math.Sin(primRot), 0);
+                Vector3d primUp = new Vector3d(-Math.Sin(primRot), Math.Cos(primRot), 0);
+                Vector3d primOffset = GetOffsetFromAnchorToCenter(primAtt.Justify, primLen, primH, primDir, primUp);
+                Point3d primVisualCenter = primAnchor + primOffset;
+
+                Matrix3d invCurrentMat = Matrix3d.Identity;
+                try { invCurrentMat = currentBlk.BlockTransform.Inverse(); } catch { }
+                Point3d localCenter = primVisualCenter.TransformBy(invCurrentMat);
 
                 // 如果仅改当前1处
                 if (!syncAllBlocks)
@@ -361,9 +401,11 @@ namespace AttributeWorkbench.Services
                         {
                             def.UpgradeOpen();
                             def.Height = target.CurrentHeight;
-                            def.TextString = target.CombinedText;
+                            // 保持母块定义为通用模板，严禁将具体某一处的门编号写入母块默认定义
                             def.Invisible = false;
-                            def.AdjustAlignment(db);
+
+                            Point3d defAnchor = localCenter - primOffset;
+                            SetTextLocation(def, defAnchor);
                             def.RecordGraphicsModified(true);
                         }
                         else
@@ -383,7 +425,7 @@ namespace AttributeWorkbench.Services
                     }
                 }
 
-                // 3. 同步全图所有同名块实例
+                // 3. 同步全图所有同名块实例（强行正向投影覆盖，彻底抹平历史错乱基点！）
                 foreach (ObjectId refId in target.AllBlockReferenceIds)
                 {
                     if (refId == target.ParentBlockId) continue;
@@ -393,7 +435,6 @@ namespace AttributeWorkbench.Services
 
                     AttributeReference instPrim = null;
                     List<AttributeReference> instSecs = new List<AttributeReference>();
-                    List<string> instPartTexts = new List<string>();
 
                     foreach (ObjectId attId in bRef.AttributeCollection)
                     {
@@ -419,21 +460,64 @@ namespace AttributeWorkbench.Services
 
                     if (instPrim != null)
                     {
-                        // 智能拼接每个实例自身原有的分段编号
+                        // 智能判断该门窗实例自身是否原本就有可见/有效的编号内容
+                        bool hasAnyContent = (!instPrim.Invisible && !string.IsNullOrEmpty(instPrim.TextString) && instPrim.TextString.Trim().Length > 0);
                         System.Text.StringBuilder instSb = new System.Text.StringBuilder();
-                        instSb.Append(instPrim.TextString.Trim());
+                        if (!string.IsNullOrEmpty(instPrim.TextString))
+                        {
+                            instSb.Append(instPrim.TextString.Trim());
+                        }
+
                         foreach (AttributeReference sAtt in instSecs)
                         {
-                            instSb.Append(sAtt.TextString.Trim());
+                            if (!sAtt.Invisible && !string.IsNullOrEmpty(sAtt.TextString) && sAtt.TextString.Trim().Length > 0)
+                            {
+                                hasAnyContent = true;
+                            }
+                            if (!string.IsNullOrEmpty(sAtt.TextString))
+                            {
+                                instSb.Append(sAtt.TextString.Trim());
+                            }
                         }
-                        string instCombined = instSb.ToString();
-                        if (string.IsNullOrEmpty(instCombined)) instCombined = target.CombinedText;
+
+                        string instCombined = instSb.ToString().Trim();
+
+                        // 关键保护：若该图块实例原本完全没有输入编号或所有编号属性均为空/不可见，
+                        // 绝对禁止强行赋予其他门窗的编号！保持原样为空且隐形！
+                        if (!hasAnyContent || string.IsNullOrEmpty(instCombined))
+                        {
+                            instPrim.UpgradeOpen();
+                            instPrim.TextString = "";
+                            instPrim.Invisible = true;
+                            instPrim.RecordGraphicsModified(true);
+
+                            foreach (AttributeReference sAtt in instSecs)
+                            {
+                                sAtt.UpgradeOpen();
+                                sAtt.TextString = "";
+                                sAtt.Invisible = true;
+                                sAtt.RecordGraphicsModified(true);
+                            }
+                            continue;
+                        }
 
                         instPrim.UpgradeOpen();
+                        instPrim.LockPositionInBlock = false;
                         instPrim.TextString = instCombined;
                         instPrim.Height = target.CurrentHeight;
                         instPrim.Invisible = false;
-                        instPrim.AdjustAlignment(db);
+
+                        // 核心：基于图块几何矩阵强行重定位，彻底消除旋转和镜像导致的应用字高后基点不同步问题！
+                        Point3d targetWcsCenter = localCenter.TransformBy(bRef.BlockTransform);
+                        double instRot = NormalizeAngleReadable(instPrim.Rotation);
+                        instPrim.Rotation = instRot;
+                        double instWf = instPrim.WidthFactor > 0.01 ? instPrim.WidthFactor : 0.7;
+                        double instLen = EstimateTextLength(instCombined, primH, instWf);
+                        Vector3d instDir = new Vector3d(Math.Cos(instRot), Math.Sin(instRot), 0);
+                        Vector3d instUp = new Vector3d(-Math.Sin(instRot), Math.Cos(instRot), 0);
+                        Vector3d instOffset = GetOffsetFromAnchorToCenter(instPrim.Justify, instLen, primH, instDir, instUp);
+                        Point3d targetAnchor = targetWcsCenter - instOffset;
+                        SetTextLocation(instPrim, targetAnchor);
                         instPrim.RecordGraphicsModified(true);
 
                         foreach (AttributeReference sAtt in instSecs)
@@ -522,9 +606,9 @@ namespace AttributeWorkbench.Services
                         {
                             Vector3d disp = partDispMap[att.Tag];
                             att.UpgradeOpen();
+                            try { att.LockPositionInBlock = false; } catch { }
                             att.Height = height;
-                            att.TransformBy(Matrix3d.Displacement(disp));
-                            att.AdjustAlignment(db);
+                            TranslateText(att, disp);
                             att.RecordGraphicsModified(true);
                         }
                     }
@@ -537,12 +621,25 @@ namespace AttributeWorkbench.Services
                     return syncCount;
                 }
 
-                // 4. 将位移映射至母块局部坐标系
-                Matrix3d invMat = target.BlockTransform.Inverse();
-                Dictionary<string, Vector3d> localDispMap = new Dictionary<string, Vector3d>(StringComparer.OrdinalIgnoreCase);
-                foreach (KeyValuePair<string, Vector3d> kvp in partDispMap)
+                // 4. 专业 CAD 几何投影核心 (Canonical Physical Offset Projection)：
+                // 4. 母块定义与全图所有同名块正向投影重对齐 (基于图块定义局部坐标系映射)
+                Matrix3d invTargetMat = Matrix3d.Identity;
+                try { invTargetMat = currentBlk.BlockTransform.Inverse(); } catch { }
+                Dictionary<string, Point3d> localAnchorMap = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
+
+                if (currentBlk != null)
                 {
-                    localDispMap[kvp.Key] = kvp.Value.TransformBy(invMat);
+                    foreach (ObjectId attId in currentBlk.AttributeCollection)
+                    {
+                        AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                        if (att != null && partDispMap.ContainsKey(att.Tag))
+                        {
+                            Point3d wcsPt = (att.Justify == AttachmentPoint.BaseLeft)
+                                ? att.Position
+                                : (att.AlignmentPoint != Point3d.Origin ? att.AlignmentPoint : att.Position);
+                            localAnchorMap[att.Tag] = wcsPt.TransformBy(invTargetMat);
+                        }
+                    }
                 }
 
                 // 母块定义同步
@@ -552,18 +649,18 @@ namespace AttributeWorkbench.Services
                     foreach (ObjectId entId in btr)
                     {
                         AttributeDefinition def = tr.GetObject(entId, OpenMode.ForRead) as AttributeDefinition;
-                        if (def != null && localDispMap.ContainsKey(def.Tag))
+                        if (def != null && localAnchorMap.ContainsKey(def.Tag))
                         {
+                            Point3d locPt = localAnchorMap[def.Tag];
                             def.UpgradeOpen();
                             def.Height = height;
-                            def.TransformBy(Matrix3d.Displacement(localDispMap[def.Tag]));
-                            def.AdjustAlignment(db);
+                            SetTextLocation(def, locPt);
                             def.RecordGraphicsModified(true);
                         }
                     }
                 }
 
-                // 全图所有同名块同步
+                // 全图所有同名块正向投影重对齐 (严格基于 BlockTransform 映射，完美支持旋转/镜像)
                 foreach (ObjectId refId in target.AllBlockReferenceIds)
                 {
                     if (refId == target.ParentBlockId) continue;
@@ -575,18 +672,32 @@ namespace AttributeWorkbench.Services
                     foreach (ObjectId attId in bRef.AttributeCollection)
                     {
                         AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                        if (att != null && localDispMap.ContainsKey(att.Tag))
+                        if (att != null && localAnchorMap.ContainsKey(att.Tag))
                         {
-                            Vector3d instDisp = localDispMap[att.Tag].TransformBy(bRef.BlockTransform);
+                            Point3d targetWcsAnchor = localAnchorMap[att.Tag].TransformBy(bRef.BlockTransform);
                             att.UpgradeOpen();
+                            att.LockPositionInBlock = false;
                             att.Height = height;
-                            att.TransformBy(Matrix3d.Displacement(instDisp));
-                            att.AdjustAlignment(db);
+                            SetTextLocation(att, targetWcsAnchor);
                             att.RecordGraphicsModified(true);
                             touched = true;
                         }
                     }
                     if (touched) syncCount++;
+                }
+
+                // 更新内存中的部件坐标，防止后续连续操作基点错乱
+                if (target.RelatedParts != null)
+                {
+                    foreach (AttributePartInfo p in target.RelatedParts)
+                    {
+                        if (partDispMap.ContainsKey(p.Tag))
+                        {
+                            Vector3d disp = partDispMap[p.Tag];
+                            p.Position = p.Position + disp;
+                            p.AlignmentPoint = p.AlignmentPoint + disp;
+                        }
+                    }
                 }
 
                 tr.Commit();
@@ -597,14 +708,18 @@ namespace AttributeWorkbench.Services
 
         /// <summary>
         /// 批量更新属性文字位置（平移，支持多部件整体平移与单图块/全图同步控制）
+        /// 核心算法：图块局部视觉中心映射流水线 (Local Visual Center Inversion & Forward Projection)
+        /// 完美适应任意旋转角度 (0°/90°/180°/270°)、水平/垂直/任意轴镜像、比例缩放及动态块
+        /// 彻底杜绝镜像导致文字对齐撕裂、反向飞离图块或向不同方向乱跑的现象
         /// </summary>
-        public static int MoveAttributePosition(Database db, AttributeTargetInfo target, Vector3d wcsDisp, bool syncAllBlocks)
+        public static int MoveAttributePosition(Database db, AttributeTargetInfo target, Vector3d wcsDisp, bool syncAllBlocks,
+            HashSet<ObjectId> allowedBlockIds = null, bool moveAllParts = false)
         {
             if (target == null || wcsDisp.IsZeroLength()) return 0;
             int syncCount = 0;
 
             HashSet<string> movingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (target.HasMultipleParts)
+            if (moveAllParts && target.HasMultipleParts)
             {
                 foreach (AttributePartInfo p in target.RelatedParts) movingTags.Add(p.Tag);
             }
@@ -613,75 +728,134 @@ namespace AttributeWorkbench.Services
                 movingTags.Add(target.Tag);
             }
 
+            Matrix3d dispMat = Matrix3d.Displacement(wcsDisp);
+
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                // 将 WCS 位移逆变换为母块定义内部的局部坐标系位移 (localDisp)
-                Matrix3d invMat = target.BlockTransform.Inverse();
-                Vector3d localDisp = wcsDisp.TransformBy(invMat);
-
-                // 1. 修改当前选中的图块
                 BlockReference currentBlk = tr.GetObject(target.ParentBlockId, OpenMode.ForRead) as BlockReference;
-                if (currentBlk != null)
+                if (currentBlk == null) return 0;
+
+                // ── 1. 修改当前选中的图块实例，并精确提取更新后的绝对 WCS 视觉中心点 (Visual Center)
+                Dictionary<string, Point3d> newWcsCenterMap = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (ObjectId attId in currentBlk.AttributeCollection)
                 {
-                    foreach (ObjectId attId in currentBlk.AttributeCollection)
+                    AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                    if (att != null && movingTags.Contains(att.Tag))
                     {
-                        AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                        if (att != null && movingTags.Contains(att.Tag))
+                        att.UpgradeOpen();
+                        try { att.LockPositionInBlock = false; } catch { }
+                        TranslateText(att, wcsDisp);
+                        att.RecordGraphicsModified(true);
+
+                        Point3d anchor = GetTextAnchor(att);
+
+                        double h = att.Height > 0.001 ? att.Height : 200.0;
+                        double wf = att.WidthFactor > 0.01 ? att.WidthFactor : 0.7;
+                        double len = EstimateTextLength(att.TextString, h, wf);
+                        double rot = att.Rotation;
+                        Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
+                        Vector3d up = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
+                        Vector3d offset = GetOffsetFromAnchorToCenter(att.Justify, len, h, dir, up);
+                        Point3d visualCenter = anchor + offset;
+
+                        newWcsCenterMap[att.Tag] = visualCenter;
+                    }
+                }
+                syncCount++;
+
+                // ── 同步更新 target 内存对象的基准坐标与多部件坐标，杜绝连续多次平移时基点锁死旧位置导致方向错乱
+                if (target.RelatedParts != null)
+                {
+                    foreach (AttributePartInfo p in target.RelatedParts)
+                    {
+                        if (movingTags.Contains(p.Tag))
                         {
-                            att.UpgradeOpen();
-                            att.LockPositionInBlock = false;
-                            att.TransformBy(Matrix3d.Displacement(wcsDisp));
-                            att.AdjustAlignment(db);
-                            att.RecordGraphicsModified(true);
+                            p.Position = p.Position + wcsDisp;
+                            p.AlignmentPoint = p.AlignmentPoint + wcsDisp;
                         }
                     }
-                    syncCount++;
                 }
+                target.PickedPoint = target.PickedPoint + wcsDisp;
 
-                // 如果仅修改当前单个块
+                // 仅修改当前单个块：提交后直接返回
                 if (!syncAllBlocks)
                 {
                     tr.Commit();
                     return syncCount;
                 }
 
-                // 2. 更新母块定义的 AttributeDefinition 位置
+                // ── 2. 将选定图块的视觉中心点反向逆变换至母块局部坐标空间 (OCS / Block Definition Space)
+                Matrix3d invTargetMat = Matrix3d.Identity;
+                try { invTargetMat = currentBlk.BlockTransform.Inverse(); } catch { }
+                Dictionary<string, Point3d> localCenterMap = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (KeyValuePair<string, Point3d> kvp in newWcsCenterMap)
+                {
+                    localCenterMap[kvp.Key] = kvp.Value.TransformBy(invTargetMat);
+                }
+
+                // ── 3. 更新母块定义 (BlockTableRecord) 中的 AttributeDefinition 坐标
                 BlockTableRecord btr = tr.GetObject(target.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
                 if (btr != null)
                 {
                     foreach (ObjectId entId in btr)
                     {
                         AttributeDefinition attDef = tr.GetObject(entId, OpenMode.ForRead) as AttributeDefinition;
-                        if (attDef != null && movingTags.Contains(attDef.Tag))
+                        if (attDef != null && localCenterMap.ContainsKey(attDef.Tag))
                         {
+                            Point3d locCenter = localCenterMap[attDef.Tag];
                             attDef.UpgradeOpen();
-                            attDef.TransformBy(Matrix3d.Displacement(localDisp));
-                            attDef.AdjustAlignment(db);
+
+                            double hDef = attDef.Height > 0.001 ? attDef.Height : 200.0;
+                            double wfDef = attDef.WidthFactor > 0.01 ? attDef.WidthFactor : 0.7;
+                            string defText = !string.IsNullOrEmpty(attDef.TextString) ? attDef.TextString : attDef.Tag;
+                            double lenDef = EstimateTextLength(defText, hDef, wfDef);
+                            double rotDef = attDef.Rotation;
+                            Vector3d dirDef = new Vector3d(Math.Cos(rotDef), Math.Sin(rotDef), 0);
+                            Vector3d upDef = new Vector3d(-Math.Sin(rotDef), Math.Cos(rotDef), 0);
+                            Vector3d offsetDef = GetOffsetFromAnchorToCenter(attDef.Justify, lenDef, hDef, dirDef, upDef);
+                            Point3d anchorDef = locCenter - offsetDef;
+                            SetTextLocation(attDef, anchorDef);
                             attDef.RecordGraphicsModified(true);
                         }
                     }
                 }
 
-                // 3. 同步全图所有同名块引用的同名属性位置
+                // ── 4. 全图所有同名块正向投影重对齐 (基于视觉中心映射，彻底解决旋转与镜像问题)
                 foreach (ObjectId refId in target.AllBlockReferenceIds)
                 {
-                    if (refId == target.ParentBlockId) continue;
+                    if (refId == target.ParentBlockId) continue; // 当前块已在第一步更新
+
+                    if (allowedBlockIds != null && !allowedBlockIds.Contains(refId)) continue;
 
                     BlockReference bRef = tr.GetObject(refId, OpenMode.ForRead) as BlockReference;
                     if (bRef == null) continue;
 
-                    Vector3d instDisp = localDisp.TransformBy(bRef.BlockTransform);
                     bool touched = false;
-
                     foreach (ObjectId attId in bRef.AttributeCollection)
                     {
                         AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                        if (att != null && movingTags.Contains(att.Tag))
+                        if (att != null && localCenterMap.ContainsKey(att.Tag))
                         {
+                            Point3d locCenter = localCenterMap[att.Tag];
+                            Point3d targetWcsCenter = locCenter.TransformBy(bRef.BlockTransform);
+
                             att.UpgradeOpen();
-                            att.LockPositionInBlock = false;
-                            att.TransformBy(Matrix3d.Displacement(instDisp));
-                            att.AdjustAlignment(db);
+                            try { att.LockPositionInBlock = false; } catch { }
+
+                            // 规范化文字旋转角度，确保保持易读（不倒立）
+                            double rot = NormalizeAngleReadable(att.Rotation);
+                            att.Rotation = rot;
+
+                            double h = att.Height > 0.001 ? att.Height : 200.0;
+                            double wf = att.WidthFactor > 0.01 ? att.WidthFactor : 0.7;
+                            double len = EstimateTextLength(att.TextString, h, wf);
+                            Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
+                            Vector3d up = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
+                            Vector3d offset = GetOffsetFromAnchorToCenter(att.Justify, len, h, dir, up);
+                            Point3d targetAnchor = targetWcsCenter - offset;
+                            SetTextLocation(att, targetAnchor);
                             att.RecordGraphicsModified(true);
                             touched = true;
                         }
@@ -694,5 +868,216 @@ namespace AttributeWorkbench.Services
 
             return syncCount;
         }
+
+        #region 视觉中心与文字几何计算辅助方法
+
+        /// <summary>
+        /// 估算属性文字串的视觉排版物理长度
+        /// </summary>
+        private static double EstimateTextLength(string text, double height, double widthFactor)
+        {
+            if (string.IsNullOrEmpty(text)) return Math.Max(height, 50.0);
+            double h = height > 0.001 ? height : 200.0;
+            double wf = widthFactor > 0.01 ? widthFactor : 0.7;
+            double charWidth = h * wf;
+            double totalLen = 0;
+            foreach (char c in text)
+            {
+                if (c <= 127)
+                {
+                    if (char.IsDigit(c))
+                        totalLen += charWidth * 0.65;
+                    else if (char.IsUpper(c))
+                        totalLen += charWidth * 0.75;
+                    else if (char.IsLower(c))
+                        totalLen += charWidth * 0.6;
+                    else
+                        totalLen += charWidth * 0.45;
+                }
+                else
+                {
+                    // 中文全角汉字
+                    totalLen += charWidth * 1.0;
+                }
+            }
+            return Math.Max(totalLen, charWidth * 0.5);
+        }
+
+        /// <summary>
+        /// 计算对齐锚点 (Anchor) 到文字视觉中心点 (Center) 的偏移向量
+        /// </summary>
+        private static Vector3d GetOffsetFromAnchorToCenter(AttachmentPoint justify, double length, double height, Vector3d dir, Vector3d up)
+        {
+            double halfLen = length * 0.5;
+            double halfH = height * 0.5;
+
+            double deltaU = 0;
+            double deltaV = 0;
+
+            switch (justify)
+            {
+                case AttachmentPoint.BaseLeft:
+                case AttachmentPoint.BottomLeft:
+                    deltaU = halfLen;
+                    deltaV = halfH;
+                    break;
+                case AttachmentPoint.BaseCenter:
+                case AttachmentPoint.BottomCenter:
+                    deltaU = 0;
+                    deltaV = halfH;
+                    break;
+                case AttachmentPoint.BaseRight:
+                case AttachmentPoint.BottomRight:
+                    deltaU = -halfLen;
+                    deltaV = halfH;
+                    break;
+                case AttachmentPoint.MiddleLeft:
+                    deltaU = halfLen;
+                    deltaV = 0;
+                    break;
+                case AttachmentPoint.MiddleCenter:
+                    deltaU = 0;
+                    deltaV = 0;
+                    break;
+                case AttachmentPoint.MiddleRight:
+                    deltaU = -halfLen;
+                    deltaV = 0;
+                    break;
+                case AttachmentPoint.TopLeft:
+                    deltaU = halfLen;
+                    deltaV = -halfH;
+                    break;
+                case AttachmentPoint.TopCenter:
+                    deltaU = 0;
+                    deltaV = -halfH;
+                    break;
+                case AttachmentPoint.TopRight:
+                    deltaU = -halfLen;
+                    deltaV = -halfH;
+                    break;
+                default:
+                    deltaU = halfLen;
+                    deltaV = halfH;
+                    break;
+            }
+
+            return deltaU * dir + deltaV * up;
+        }
+
+        /// <summary>
+        /// 安全设置文字绝对锚点坐标
+        /// 严格遵循 AutoCAD 规范：BaseLeft 仅写入 Position，非 BaseLeft 写入 AlignmentPoint 并重算对齐
+        /// 绝不触发 AutoCAD 对 BaseLeft 文字访问 AlignmentPoint 抛出的 eNotApplicable 异常
+        /// </summary>
+        public static void SetTextLocation(DBText txt, Point3d anchorPt)
+        {
+            if (txt == null) return;
+            if (txt.Justify == AttachmentPoint.BaseLeft)
+            {
+                txt.Position = anchorPt;
+            }
+            else
+            {
+                try
+                {
+                    txt.AlignmentPoint = anchorPt;
+                    Database db = txt.Database;
+                    if (db == null)
+                    {
+                        try { db = HostApplicationServices.WorkingDatabase; } catch { }
+                    }
+                    if (db != null)
+                    {
+                        try { txt.AdjustAlignment(db); } catch { }
+                    }
+                }
+                catch
+                {
+                    try { txt.Position = anchorPt; } catch { }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 安全平移文字（增量位移）
+        /// 严格保护 BaseLeft 文字，绝不调用其 AlignmentPoint
+        /// </summary>
+        public static void TranslateText(DBText txt, Vector3d disp)
+        {
+            if (txt == null) return;
+            txt.Position = txt.Position + disp;
+            if (txt.Justify != AttachmentPoint.BaseLeft)
+            {
+                try
+                {
+                    txt.AlignmentPoint = txt.AlignmentPoint + disp;
+                    Database db = txt.Database;
+                    if (db == null)
+                    {
+                        try { db = HostApplicationServices.WorkingDatabase; } catch { }
+                    }
+                    if (db != null)
+                    {
+                        try { txt.AdjustAlignment(db); } catch { }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// 安全获取文字在世界坐标系/局部坐标系下的基准锚点
+        /// </summary>
+        public static Point3d GetTextAnchor(DBText txt)
+        {
+            if (txt == null) return Point3d.Origin;
+            if (txt.Justify != AttachmentPoint.BaseLeft)
+            {
+                try
+                {
+                    return txt.AlignmentPoint;
+                }
+                catch { }
+            }
+            return txt.Position;
+        }
+
+        /// <summary>
+        /// 规范化文字旋转角度，确保保持建筑制图人眼易读（禁止倒立字）
+        /// </summary>
+        private static double NormalizeAngleReadable(double rot)
+        {
+            while (rot < 0) rot += Math.PI * 2;
+            while (rot >= Math.PI * 2) rot -= Math.PI * 2;
+            if (rot > Math.PI * 0.5 + 0.001 && rot <= Math.PI * 1.5 + 0.001)
+            {
+                rot -= Math.PI;
+                if (rot < 0) rot += Math.PI * 2;
+            }
+            return rot;
+        }
+
+        /// <summary>
+        /// 安全调整属性文字对齐（自动跳过 BaseLeft，杜绝 AutoCAD 抛出 eNotApplicable 异常导致事务回滚）
+        /// </summary>
+        public static void SafeAdjustAlignment(DBText txt, Database db)
+        {
+            if (txt == null || txt.Justify == AttachmentPoint.BaseLeft) return;
+            try
+            {
+                Database targetDb = db ?? txt.Database;
+                if (targetDb == null)
+                {
+                    try { targetDb = HostApplicationServices.WorkingDatabase; } catch { }
+                }
+                if (targetDb != null)
+                {
+                    txt.AdjustAlignment(targetDb);
+                }
+            }
+            catch { }
+        }
+
+        #endregion
     }
 }

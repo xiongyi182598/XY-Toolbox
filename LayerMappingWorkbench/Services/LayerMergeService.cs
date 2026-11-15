@@ -253,50 +253,75 @@ namespace LayerMappingWorkbench.Services
                     LayerTableRecord newLtr = new LayerTableRecord();
                     newLtr.Name = targetName;
 
-                    if (hasDef && def != null)
-                    {
-                        // 继承外部标准图纸的颜色
-                        if (def.ColorIndex > 0 && def.ColorIndex <= 255)
-                        {
-                            newLtr.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, (short)def.ColorIndex);
-                        }
-                        else
-                        {
-                            newLtr.Color = Autodesk.AutoCAD.Colors.Color.FromRgb(def.Color.R, def.Color.G, def.Color.B);
-                        }
+                    // 1. 求解新建图层颜色 (杜绝变白)
+                    Autodesk.AutoCAD.Colors.Color assignedColor = null;
 
-                        // 继承外部标准图纸的线型
-                        if (!string.IsNullOrEmpty(def.Linetype) && !string.Equals(def.Linetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    // 优先 A: 规则中自带的目标色 HEX (非默认白优先)
+                    if (!string.IsNullOrEmpty(kv.Value.TargetColorHex))
+                    {
+                        System.Windows.Media.Color mc = LayerAlignmentEngine.ParseColorHex(kv.Value.TargetColorHex);
+                        if (mc.R != 255 || mc.G != 255 || mc.B != 255)
                         {
-                            if (ltt.Has(def.Linetype))
-                            {
-                                newLtr.LinetypeObjectId = ltt[def.Linetype];
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    db.LoadLineTypeFile(def.Linetype, "acad.lin");
-                                    if (ltt.Has(def.Linetype))
-                                    {
-                                        newLtr.LinetypeObjectId = ltt[def.Linetype];
-                                    }
-                                }
-                                catch { }
-                            }
+                            assignedColor = Autodesk.AutoCAD.Colors.Color.FromRgb(mc.R, mc.G, mc.B);
                         }
                     }
-                    else
+
+                    // 优先 B: 外部图元元数据 def (ACI 索引或 RGB)
+                    if (assignedColor == null && hasDef && def != null)
                     {
-                        // 未加载外部标准图纸：智能继承源图层颜色与线型，彻底杜绝全变成白色
-                        string srcName = kv.Key;
-                        if (lt.Has(srcName))
+                        if (def.ColorIndex > 0 && def.ColorIndex <= 255 && def.ColorIndex != 7)
                         {
-                            LayerTableRecord srcLtr = (LayerTableRecord)tr.GetObject(lt[srcName], OpenMode.ForRead);
-                            newLtr.Color = srcLtr.Color;
-                            newLtr.LinetypeObjectId = srcLtr.LinetypeObjectId;
+                            assignedColor = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, (short)def.ColorIndex);
                         }
-                        // 若源图层也不存在则保留默认（系统会给 ACI 7 白色，可接受）
+                        else if (def.Color.R != 255 || def.Color.G != 255 || def.Color.B != 255)
+                        {
+                            assignedColor = Autodesk.AutoCAD.Colors.Color.FromRgb(def.Color.R, def.Color.G, def.Color.B);
+                        }
+                    }
+
+                    // 优先 C: 继承当前图纸对应源图层的实际颜色
+                    string srcName = kv.Key;
+                    LayerTableRecord srcLtr = null;
+                    if (lt.Has(srcName))
+                    {
+                        srcLtr = (LayerTableRecord)tr.GetObject(lt[srcName], OpenMode.ForRead);
+                    }
+
+                    if (assignedColor == null && srcLtr != null)
+                    {
+                        assignedColor = srcLtr.Color;
+                    }
+
+                    // 兜底: 白色
+                    if (assignedColor == null)
+                    {
+                        assignedColor = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, 7);
+                    }
+                    newLtr.Color = assignedColor;
+
+                    // 2. 求解新建图层线型
+                    string targetLtName = null;
+                    if (!string.IsNullOrEmpty(kv.Value.TargetLinetype) && !string.Equals(kv.Value.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetLtName = kv.Value.TargetLinetype;
+                    }
+                    else if (hasDef && def != null && !string.IsNullOrEmpty(def.Linetype) && !string.Equals(def.Linetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetLtName = def.Linetype;
+                    }
+
+                    if (!string.IsNullOrEmpty(targetLtName))
+                    {
+                        ObjectId ltId = EnsureLinetypeLoaded(db, ltt, targetLtName);
+                        if (ltId != ObjectId.Null)
+                        {
+                            newLtr.LinetypeObjectId = ltId;
+                        }
+                    }
+                    else if (srcLtr != null && srcLtr.LinetypeObjectId != ObjectId.Null)
+                    {
+                        // 目标未指定特殊线型时，智能继承源图层的线型
+                        newLtr.LinetypeObjectId = srcLtr.LinetypeObjectId;
                     }
 
                     lt.Add(newLtr);
@@ -304,61 +329,53 @@ namespace LayerMappingWorkbench.Services
                 }
                 else if (hasDef && def != null)
                 {
-                    // ---- 目标图层已存在：当有外部标准定义时，同步更新其颜色与线型 ----
+                    // ---- 目标图层已存在：当有非白色明确颜色/线型定义时，同步更新其属性 ----
                     LayerTableRecord existLtr = (LayerTableRecord)tr.GetObject(lt[targetName], OpenMode.ForRead);
-                    bool needUpdate = false;
 
-                    Autodesk.AutoCAD.Colors.Color newColor;
-                    if (def.ColorIndex > 0 && def.ColorIndex <= 255)
+                    Autodesk.AutoCAD.Colors.Color specifiedColor = null;
+                    if (!string.IsNullOrEmpty(kv.Value.TargetColorHex))
                     {
-                        newColor = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, (short)def.ColorIndex);
-                    }
-                    else
-                    {
-                        newColor = Autodesk.AutoCAD.Colors.Color.FromRgb(def.Color.R, def.Color.G, def.Color.B);
-                    }
-
-                    if (existLtr.Color.ColorIndex != newColor.ColorIndex) needUpdate = true;
-
-                    // 检查线型是否需要同步
-                    string existLinetypeName = "Continuous";
-                    if (existLtr.LinetypeObjectId != ObjectId.Null)
-                    {
-                        try
+                        System.Windows.Media.Color mc = LayerAlignmentEngine.ParseColorHex(kv.Value.TargetColorHex);
+                        if (mc.R != 255 || mc.G != 255 || mc.B != 255)
                         {
-                            LinetypeTableRecord existLtRec = (LinetypeTableRecord)tr.GetObject(existLtr.LinetypeObjectId, OpenMode.ForRead);
-                            existLinetypeName = existLtRec.Name;
+                            specifiedColor = Autodesk.AutoCAD.Colors.Color.FromRgb(mc.R, mc.G, mc.B);
                         }
-                        catch { }
                     }
-                    if (!string.IsNullOrEmpty(def.Linetype) && !string.Equals(existLinetypeName, def.Linetype, StringComparison.OrdinalIgnoreCase))
+                    if (specifiedColor == null && def != null)
                     {
-                        needUpdate = true;
+                        if (def.ColorIndex > 0 && def.ColorIndex <= 255 && def.ColorIndex != 7)
+                        {
+                            specifiedColor = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByAci, (short)def.ColorIndex);
+                        }
+                        else if (def.Color.R != 255 || def.Color.G != 255 || def.Color.B != 255)
+                        {
+                            specifiedColor = Autodesk.AutoCAD.Colors.Color.FromRgb(def.Color.R, def.Color.G, def.Color.B);
+                        }
                     }
 
-                    if (needUpdate)
+                    if (specifiedColor != null && existLtr.Color.ColorValue != specifiedColor.ColorValue)
                     {
                         existLtr.UpgradeOpen();
-                        existLtr.Color = newColor;
+                        existLtr.Color = specifiedColor;
+                    }
 
-                        if (!string.IsNullOrEmpty(def.Linetype) && !string.Equals(def.Linetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    string specifiedLt = null;
+                    if (!string.IsNullOrEmpty(kv.Value.TargetLinetype) && !string.Equals(kv.Value.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        specifiedLt = kv.Value.TargetLinetype;
+                    }
+                    else if (!string.IsNullOrEmpty(def.Linetype) && !string.Equals(def.Linetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        specifiedLt = def.Linetype;
+                    }
+
+                    if (!string.IsNullOrEmpty(specifiedLt))
+                    {
+                        ObjectId ltId = EnsureLinetypeLoaded(db, ltt, specifiedLt);
+                        if (ltId != ObjectId.Null && existLtr.LinetypeObjectId != ltId)
                         {
-                            if (ltt.Has(def.Linetype))
-                            {
-                                existLtr.LinetypeObjectId = ltt[def.Linetype];
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    db.LoadLineTypeFile(def.Linetype, "acad.lin");
-                                    if (ltt.Has(def.Linetype))
-                                    {
-                                        existLtr.LinetypeObjectId = ltt[def.Linetype];
-                                    }
-                                }
-                                catch { }
-                            }
+                            existLtr.UpgradeOpen();
+                            existLtr.LinetypeObjectId = ltId;
                         }
                     }
                 }
@@ -550,6 +567,83 @@ namespace LayerMappingWorkbench.Services
             catch { }
 
             return purged;
+        }
+
+        private static ObjectId EnsureLinetypeLoaded(Database db, LinetypeTable ltt, string linetypeName)
+        {
+            if (string.IsNullOrEmpty(linetypeName) || string.Equals(linetypeName, "Continuous", StringComparison.OrdinalIgnoreCase))
+                return ObjectId.Null;
+
+            if (ltt.Has(linetypeName))
+            {
+                return ltt[linetypeName];
+            }
+
+            // 清理外部参照前缀 (如 XA1-L0100|DAS -> DAS)
+            string cleanName = linetypeName;
+            int pipeIdx = cleanName.LastIndexOf('|');
+            if (pipeIdx >= 0 && pipeIdx < cleanName.Length - 1)
+            {
+                cleanName = cleanName.Substring(pipeIdx + 1).Trim();
+            }
+
+            if (ltt.Has(cleanName))
+            {
+                return ltt[cleanName];
+            }
+
+            // 尝试在图纸支持的标准线型文件中加载
+            string[] linFiles = new string[] { "acadiso.lin", "acad.lin", "tch.lin" };
+            string[] candidateNames = new string[] { cleanName, linetypeName };
+
+            foreach (string name in candidateNames)
+            {
+                if (string.IsNullOrEmpty(name)) continue;
+                foreach (string lin in linFiles)
+                {
+                    try
+                    {
+                        db.LoadLineTypeFile(name, lin);
+                        if (ltt.Has(name))
+                        {
+                            return ltt[name];
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            // 尝试常见别名转换 (如 DASH -> DASHED, HID -> HIDDEN, CEN -> CENTER, DOT -> DOT)
+            string alias = ResolveLinetypeAlias(cleanName);
+            if (!string.IsNullOrEmpty(alias))
+            {
+                if (ltt.Has(alias)) return ltt[alias];
+                foreach (string lin in linFiles)
+                {
+                    try
+                    {
+                        db.LoadLineTypeFile(alias, lin);
+                        if (ltt.Has(alias)) return ltt[alias];
+                    }
+                    catch { }
+                }
+            }
+
+            return ObjectId.Null;
+        }
+
+        private static string ResolveLinetypeAlias(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            string upper = name.Trim().ToUpperInvariant();
+            if (upper == "DASH" || upper == "DASHED2" || upper == "DASHEDX2") return "DASHED";
+            if (upper == "HID" || upper == "HIDDEN2" || upper == "HIDDENX2") return "HIDDEN";
+            if (upper == "CEN" || upper == "CENTER2" || upper == "CENTERX2") return "CENTER";
+            if (upper == "DOT2" || upper == "DOTX2") return "DOT";
+            if (upper == "DIV" || upper == "DIVIDE2") return "DIVIDE";
+            if (upper == "PHAN" || upper == "PHANTOM2") return "PHANTOM";
+            if (upper == "BORDER2") return "BORDER";
+            return null;
         }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Drawing;
@@ -339,6 +339,171 @@ namespace XY_Deepening_Toolbox
 
     public class Commands
     {
+        public static readonly int CurrentBuildVersion = 187;
+
+        public static string GetApplicationDirectory()
+        {
+            try
+            {
+                string loc = typeof(Commands).Assembly.Location;
+                if (!string.IsNullOrEmpty(loc))
+                {
+                    string dir = System.IO.Path.GetDirectoryName(loc);
+                    if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
+                        return dir;
+                }
+            }
+            catch { }
+
+            try
+            {
+                foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(asm.Location) && asm.FullName != null && asm.FullName.StartsWith("XY_Toolbox", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string dir = System.IO.Path.GetDirectoryName(asm.Location);
+                            if (!string.IsNullOrEmpty(dir) && System.IO.Directory.Exists(dir))
+                                return dir;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            return "d:\\XY-Toolbox";
+        }
+
+        public static bool TryForwardToLatest(string methodName, params object[] args)
+        {
+            try
+            {
+                System.Reflection.Assembly currentAsm = typeof(Commands).Assembly;
+                System.Reflection.Assembly latestAsm = currentAsm;
+                int maxVer = CurrentBuildVersion;
+
+                foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
+                    {
+                        if (asm.FullName != null && asm.FullName.StartsWith("XY_Toolbox", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Type cmdType = asm.GetType("XY_Deepening_Toolbox.Commands");
+                            if (cmdType != null)
+                            {
+                                System.Reflection.FieldInfo fi = cmdType.GetField("CurrentBuildVersion", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                                if (fi != null)
+                                {
+                                    object val = fi.GetValue(null);
+                                    if (val is int && (int)val > maxVer)
+                                    {
+                                        maxVer = (int)val;
+                                        latestAsm = asm;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (latestAsm != currentAsm)
+                {
+                    Type latestCmdType = latestAsm.GetType("XY_Deepening_Toolbox.Commands");
+                    if (latestCmdType != null)
+                    {
+                        System.Reflection.MethodInfo targetMethod = latestCmdType.GetMethod(methodName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                        if (targetMethod != null)
+                        {
+                            targetMethod.Invoke(null, args);
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        // ========================================================
+        // 核心热重载命令 (XCZ / RELOAD / XYLOAD)
+        // 纯内存级动态加载最新 DLL，无需重启 AutoCAD！
+        // ========================================================
+        [CommandMethod("XCZ")]
+        [CommandMethod("RELOAD")]
+        [CommandMethod("XYLOAD")]
+        public static void ReloadAppCommand()
+        {
+            if (TryForwardToLatest("ReloadAppCommand")) return;
+
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            Editor ed = doc.Editor;
+
+            try
+            {
+                string appDir = GetApplicationDirectory();
+
+                string bestDllPath = null;
+                int bestVer = CurrentBuildVersion;
+
+                if (System.IO.Directory.Exists(appDir))
+                {
+                    string[] files = System.IO.Directory.GetFiles(appDir, "XY_Toolbox_*.dll");
+                    foreach (string file in files)
+                    {
+                        string fn = System.IO.Path.GetFileNameWithoutExtension(file);
+                        int v = 0;
+                        string numPart = System.Text.RegularExpressions.Regex.Match(fn, @"\d+").Value;
+                        if (int.TryParse(numPart, out v) && v > bestVer)
+                        {
+                            bestVer = v;
+                            bestDllPath = file;
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(bestDllPath) && System.IO.File.Exists(bestDllPath))
+                {
+                    try
+                    {
+                        byte[] rawBytes = System.IO.File.ReadAllBytes(bestDllPath);
+                        System.Reflection.Assembly newlyLoadedAsm = System.Reflection.Assembly.Load(rawBytes);
+                        if (newlyLoadedAsm != null)
+                        {
+                            ed.WriteMessage(string.Format("\n★ [XY工具箱] 成功无感注入最新核心: {0} (v{1})！\n",
+                                System.IO.Path.GetFileName(bestDllPath), bestVer));
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ed.WriteMessage(string.Format("\n[XY工具箱] 注入新核心异常: {0}\n", ex.Message));
+                    }
+                }
+
+                string autoloadFile = System.IO.Path.Combine(appDir, "autoload.lsp").Replace("\\", "/");
+                string eraseFile = System.IO.Path.Combine(appDir, "xy_block_erase.lsp").Replace("\\", "/");
+                string shortcutsFile = System.IO.Path.Combine(appDir, "shortcuts.lsp").Replace("\\", "/");
+
+                string cmdStr = string.Format("(progn (if (findfile \"{0}\") (load \"{0}\")) (if (findfile \"{1}\") (load \"{1}\")) (if (findfile \"{2}\") (load \"{2}\")) (princ))\n",
+                    autoloadFile, eraseFile, shortcutsFile);
+
+                doc.SendStringToExecute(cmdStr, false, false, false);
+
+                ed.WriteMessage("\n========================================================");
+                ed.WriteMessage(string.Format("\n★ [XY工具箱] 程序热重载成功 (XCZ)！当前运行核心: v{0}", Math.Max(CurrentBuildVersion, bestVer)));
+                ed.WriteMessage("\n★ 核心 .NET 内核与 LISP 快捷键已全部刷新为最新版本 (无需重启 AutoCAD)");
+                ed.WriteMessage("\n★ 属性修改面板 (XSY/MW)、穿透删除 (KSC/XSC) 与图层合并器已全部就绪");
+                ed.WriteMessage("\n========================================================\n");
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage(string.Format("\n[XY工具箱] 重载发生异常: {0}\n", ex.Message));
+            }
+        }
+
         [CommandMethod("SK")]
         [CommandMethod("SKYS")]
         [CommandMethod("SKTC")]
@@ -944,45 +1109,7 @@ namespace XY_Deepening_Toolbox
             }
         }
 
-        // ========================================================
-        // 核心热重载命令 (XCZ / RELOAD / XYLOAD)
-        // 纯内存级自适应重载最新程序集，并重新载入 LISP 配置，绝不弹窗打扰
-        // ========================================================
-        [CommandMethod("XCZ")]
-        [CommandMethod("RELOAD")]
-        [CommandMethod("XYLOAD")]
-        public static void ReloadAppCommand()
-        {
-            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            Editor ed = doc.Editor;
 
-            try
-            {
-                // 1. 刷新 WPF / WinForms 侧边栏面板
-                ForceReloadPalette();
-
-                // 2. 重新加载最新 LISP 配置
-                string appDir = System.IO.Path.GetDirectoryName(typeof(Commands).Assembly.Location);
-                string autoloadFile = System.IO.Path.Combine(appDir, "autoload.lsp").Replace("\\", "/");
-                string eraseFile = System.IO.Path.Combine(appDir, "xy_block_erase.lsp").Replace("\\", "/");
-
-                string cmdStr = string.Format("(progn (if (findfile \"{0}\") (load \"{0}\")) (if (findfile \"{1}\") (load \"{1}\")) (princ))\n",
-                    autoloadFile, eraseFile);
-
-                doc.SendStringToExecute(cmdStr, false, false, false);
-
-                ed.WriteMessage("\n========================================================");
-                ed.WriteMessage("\n★ [XY工具箱] 程序热重载成功 (XCZ)！");
-                ed.WriteMessage("\n★ 核心 .NET 内核与 LISP 快捷键已全部刷新为最新版本");
-                ed.WriteMessage("\n★ 免炸开穿透删除 (KSC/XSC) 与图层合并器 (XHB/HB1) 已就绪");
-                ed.WriteMessage("\n========================================================\n");
-            }
-            catch (System.Exception ex)
-            {
-                ed.WriteMessage(string.Format("\n[XY工具箱] 重载发生异常: {0}\n", ex.Message));
-            }
-        }
 
         // ========================================================
         // 极速图层合并 (免弹窗纯命令行点选: HB1 / XJH / FASTMERGE)
@@ -1728,8 +1855,16 @@ namespace XY_Deepening_Toolbox
                 Vector3d relPos = attDef.Position - btr.Origin;
                 Point3d targetPos = blkRef.Position + (relPos.X * scaleX * ux) + (relPos.Y * scaleY * uy);
 
-                Vector3d relAlign = attDef.AlignmentPoint - btr.Origin;
-                Point3d targetAlign = blkRef.Position + (relAlign.X * scaleX * ux) + (relAlign.Y * scaleY * uy);
+                Point3d targetAlign = targetPos;
+                if (attDef.Justify != AttachmentPoint.BaseLeft)
+                {
+                    try
+                    {
+                        Vector3d relAlign = attDef.AlignmentPoint - btr.Origin;
+                        targetAlign = blkRef.Position + (relAlign.X * scaleX * ux) + (relAlign.Y * scaleY * uy);
+                    }
+                    catch { }
+                }
 
                 double targetRotation = rot + attDef.Rotation;
 
@@ -1741,10 +1876,14 @@ namespace XY_Deepening_Toolbox
                 attRef.Position = targetPos;
                 if (attRef.Justify != AttachmentPoint.BaseLeft)
                 {
-                    attRef.AlignmentPoint = targetAlign;
+                    try
+                    {
+                        attRef.AlignmentPoint = targetAlign;
+                        attRef.AdjustAlignment(db);
+                    }
+                    catch { }
                 }
                 attRef.Rotation = targetRotation;
-                attRef.AdjustAlignment(db);
                 return true;
             }
             else
@@ -1793,11 +1932,15 @@ namespace XY_Deepening_Toolbox
                         t.Position = new Point3d(-p.X, p.Y, p.Z);
                         if (t.Justify != AttachmentPoint.BaseLeft)
                         {
-                            Point3d al = t.AlignmentPoint;
-                            t.AlignmentPoint = new Point3d(-al.X, al.Y, al.Z);
+                            try
+                            {
+                                Point3d al = t.AlignmentPoint;
+                                t.AlignmentPoint = new Point3d(-al.X, al.Y, al.Z);
+                                t.AdjustAlignment(db);
+                            }
+                            catch { }
                         }
                         t.IsMirroredInX = true;
-                        t.AdjustAlignment(db);
                     }
                 }
                 return true;
@@ -1826,11 +1969,15 @@ namespace XY_Deepening_Toolbox
                         txt.Position = new Point3d(-p.X, p.Y, p.Z);
                         if (txt.Justify != AttachmentPoint.BaseLeft)
                         {
-                            Point3d al = txt.AlignmentPoint;
-                            txt.AlignmentPoint = new Point3d(-al.X, al.Y, al.Z);
+                            try
+                            {
+                                Point3d al = txt.AlignmentPoint;
+                                txt.AlignmentPoint = new Point3d(-al.X, al.Y, al.Z);
+                                txt.AdjustAlignment(db);
+                            }
+                            catch { }
                         }
                         txt.IsMirroredInX = true;
-                        txt.AdjustAlignment(db);
                     }
 
                     newBtr.AppendEntity(clonedEnt);
@@ -1897,6 +2044,7 @@ namespace XY_Deepening_Toolbox
         [CommandMethod("MOVETEXT")]
         public static void MoveSingleAttributeText()
         {
+            if (TryForwardToLatest("MoveSingleAttributeText")) return;
             EnsureLspLoaded();
             Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
@@ -5049,53 +5197,140 @@ namespace XY_Deepening_Toolbox
 
     public class AttributeTextMoveJig : DrawJig
     {
+        private class PreviewItem
+        {
+            public string Text;
+            public Point3d BasePos;
+            public Vector3d Direction;
+            public Vector3d Normal;
+            public double Height;
+            public double WidthFactor;
+            public DBText Entity;
+        }
+
         private Point3d _basePoint;
         private Point3d _currentPoint;
-        private List<AttributeReference> _previewAtts;
+        private List<PreviewItem> _previewItems;
 
         public Vector3d DisplacementVector
         {
             get { return _basePoint.GetVectorTo(_currentPoint); }
         }
 
-        public AttributeTextMoveJig(Point3d basePoint, IEnumerable<AttributeReference> attRefs)
+        public AttributeTextMoveJig(Point3d basePoint, IEnumerable<AttributeReference> attRefs, Database db = null, string fallbackText = null, double fallbackHeight = 0)
         {
-            _basePoint = basePoint;
+            _basePoint    = basePoint;
             _currentPoint = basePoint;
-            _previewAtts = new List<AttributeReference>();
+            _previewItems = new List<PreviewItem>();
+
             if (attRefs != null)
             {
                 foreach (AttributeReference att in attRefs)
                 {
-                    if (att != null)
+                    if (att == null) continue;
+
+                    string textStr = att.TextString;
+                    if (string.IsNullOrEmpty(textStr) && !string.IsNullOrEmpty(fallbackText))
                     {
-                        _previewAtts.Add((AttributeReference)att.Clone());
+                        textStr = fallbackText;
                     }
+                    if (string.IsNullOrEmpty(textStr)) continue;
+
+                    try
+                    {
+                        double h = att.Height > 0.001 ? att.Height : (fallbackHeight > 0.001 ? fallbackHeight : 200.0);
+                        double wf = att.WidthFactor > 0.01 ? att.WidthFactor : 0.7;
+                        double rot = att.Rotation;
+                        Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
+                        Vector3d norm = Vector3d.ZAxis;
+
+                        // 确定当前属性在世界坐标系中的核心基准位置
+                        Point3d textAnchor = (att.Justify == AttachmentPoint.BaseLeft)
+                            ? att.Position
+                            : (att.AlignmentPoint != Point3d.Origin ? att.AlignmentPoint : att.Position);
+
+                        // 计算文字几何走向向量与包围盒跨度
+                        Vector3d up = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
+                        double charWidth = h * wf;
+                        double totalLen = 0;
+                        foreach (char c in textStr)
+                        {
+                            totalLen += (c <= 127) ? charWidth * 0.65 : charWidth * 1.0;
+                        }
+
+                        // 关键核心：无论原属性是 BaseLeft 还是 MiddleCenter/Center/Right，统一逆向解算为 BaseLeft 硬件绝对锚点
+                        Point3d baseLeft = textAnchor;
+                        if (att.Justify == AttachmentPoint.MiddleCenter || att.Justify == AttachmentPoint.MiddleMid)
+                        {
+                            baseLeft = textAnchor - dir * (totalLen * 0.5) - up * (h * 0.4);
+                        }
+                        else if (att.Justify == AttachmentPoint.BaseCenter || att.Justify == AttachmentPoint.TopCenter || att.Justify == AttachmentPoint.BottomCenter)
+                        {
+                            baseLeft = textAnchor - dir * (totalLen * 0.5);
+                        }
+                        else if (att.Justify == AttachmentPoint.MiddleRight || att.Justify == AttachmentPoint.TopRight || att.Justify == AttachmentPoint.BottomRight || att.Justify == AttachmentPoint.BaseRight)
+                        {
+                            baseLeft = textAnchor - dir * totalLen;
+                        }
+                        else if (att.Justify == AttachmentPoint.BaseLeft)
+                        {
+                            baseLeft = att.Position;
+                        }
+
+                        _previewItems.Add(new PreviewItem
+                        {
+                            Text = textStr,
+                            BasePos = baseLeft,
+                            Direction = dir,
+                            Normal = norm,
+                            Height = h,
+                            WidthFactor = wf,
+                            Entity = null
+                        });
+                    }
+                    catch { }
                 }
+            }
+
+            // 保护兜底：若未能从 attRefs 提取，使用 fallbackText（来自门窗当前文字内容）
+            if (_previewItems.Count == 0)
+            {
+                string fb = !string.IsNullOrEmpty(fallbackText) ? fallbackText : "门窗";
+                double fbh = fallbackHeight > 0.001 ? fallbackHeight : 200.0;
+                _previewItems.Add(new PreviewItem
+                {
+                    Text = fb,
+                    BasePos = basePoint,
+                    Direction = Vector3d.XAxis,
+                    Normal = Vector3d.ZAxis,
+                    Height = fbh,
+                    WidthFactor = 0.7,
+                    Entity = null
+                });
             }
         }
 
-        public AttributeTextMoveJig(Point3d basePoint, AttributeReference attRef)
-            : this(basePoint, attRef != null ? new AttributeReference[] { attRef } : null)
+        public AttributeTextMoveJig(Point3d basePoint, AttributeReference attRef, Database db = null, string fallbackText = null, double fallbackHeight = 0)
+            : this(basePoint, attRef != null ? new AttributeReference[] { attRef } : null, db, fallbackText, fallbackHeight)
         {
         }
 
         protected override SamplerStatus Sampler(JigPrompts prompts)
         {
             JigPromptPointOptions opt = new JigPromptPointOptions();
-            opt.Message = "\n>> 指定平移目标点或直接输入平移距离: ";
-            opt.BasePoint = _basePoint;
+            opt.Message      = "\n>> 指定平移目标点: ";
+            opt.BasePoint    = _basePoint;
             opt.UseBasePoint = true;
-            opt.Cursor = CursorType.RubberBand;
-            opt.UserInputControls = UserInputControls.Accept3dCoordinates | 
-                                    UserInputControls.NoZeroResponseAccepted | 
+            opt.Cursor       = CursorType.RubberBand;
+            opt.UserInputControls = UserInputControls.Accept3dCoordinates |
+                                    UserInputControls.NoZeroResponseAccepted |
                                     UserInputControls.GovernedByOrthoMode;
 
             PromptPointResult res = prompts.AcquirePoint(opt);
             if (res.Status == PromptStatus.Cancel || res.Status == PromptStatus.Error)
                 return SamplerStatus.Cancel;
 
-            if (res.Value.IsEqualTo(_currentPoint))
+            if (res.Value.IsEqualTo(_currentPoint, new Tolerance(1e-6, 1e-6)))
                 return SamplerStatus.NoChange;
 
             _currentPoint = res.Value;
@@ -5104,19 +5339,43 @@ namespace XY_Deepening_Toolbox
 
         protected override bool WorldDraw(WorldDraw draw)
         {
-            if (_previewAtts != null && _previewAtts.Count > 0)
+            if (_previewItems == null || _previewItems.Count == 0) return true;
+
+            try
             {
-                Vector3d vec = DisplacementVector;
-                Matrix3d mat = Matrix3d.Displacement(vec);
-                foreach (AttributeReference previewAtt in _previewAtts)
+                Vector3d disp = _basePoint.GetVectorTo(_currentPoint);
+                Matrix3d mat  = Matrix3d.Displacement(disp);
+
+                // 强制将渲染笔刷设置为亮黄色（AutoCAD 交互拖拽标准醒目色）
+                draw.SubEntityTraits.Color = 2;
+
+                foreach (PreviewItem item in _previewItems)
                 {
-                    using (AttributeReference temp = (AttributeReference)previewAtt.Clone())
+                    Point3d curPos = item.BasePos + disp;
+
+                    // 1. 核心高优先级：直接调用 AutoCAD 显卡矢量原语 Text() 绘制！
+                    // 彻底绕过 DBText 内存图元因未写入数据库无法加载 SHX 字体定义（如天正 txt.shx/hztxt.shx）导致的空白吞没问题！
+                    bool nativeDrawn = false;
+                    try
                     {
-                        temp.TransformBy(mat);
-                        draw.Geometry.Draw(temp);
+                        nativeDrawn = draw.Geometry.Text(curPos, item.Normal, item.Direction, item.Height, item.WidthFactor, 0.0, item.Text);
+                    }
+                    catch { }
+
+                    // 2. 双通道保障：如果底层 Text() 未生效，调用 PushModelTransform + Draw(Entity)
+                    if (!nativeDrawn && item.Entity != null)
+                    {
+                        try
+                        {
+                            draw.Geometry.PushModelTransform(mat);
+                            draw.Geometry.Draw(item.Entity);
+                            draw.Geometry.PopModelTransform();
+                        }
+                        catch { }
                     }
                 }
             }
+            catch { }
             return true;
         }
     }

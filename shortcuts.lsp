@@ -100,6 +100,19 @@
 (defun c:XGJ  () (c:XYSZ))
 (defun c:xgj  () (c:XYSZ))
 
+;; 核心程序集与快捷键热重载 (XCZ / RELOAD)
+(defun c:XCZ ()
+  (vl-catch-all-apply 'xy:load-latest-dll)
+  (if (findfile "shortcuts.lsp") (load (findfile "shortcuts.lsp")))
+  (if (findfile "autoload.lsp") (load (findfile "autoload.lsp")))
+  (vl-cmdf "_.XCZ")
+  (princ "\n★ [XY工具箱] 核心程序集与所有快捷键已成功秒级热重载！无需重启 AutoCAD！\n")
+  (princ)
+)
+(defun c:xcz () (c:XCZ))
+(defun c:RELOAD () (c:XCZ))
+(defun c:reload () (c:XCZ))
+
 ;; 快捷键热重载
 (defun c:REKEY () (c:rekey))
 (defun c:rekey ( / sc )
@@ -107,9 +120,7 @@
   (if (and sc (findfile sc))
     (load sc)
   )
-  (princ "
-[XY工具箱] 快捷键已全部刷新生效！
-")
+  (princ "\n[XY工具箱] 快捷键已全部刷新生效！\n")
   (princ)
 )
 

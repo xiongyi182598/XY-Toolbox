@@ -260,7 +260,7 @@ namespace LayerMappingWorkbench.Models
             if (TargetMetaProvider != null)
             {
                 TargetVisualMeta meta = TargetMetaProvider(newTargetName);
-                if (meta != null)
+                if (meta != null && (meta.Color != Colors.White || SourceColor == Colors.White))
                 {
                     TargetColor = meta.Color;
                     TargetLinetype = meta.Linetype;
@@ -271,9 +271,12 @@ namespace LayerMappingWorkbench.Models
                 }
             }
 
-            // 若未找到先知元数据，标记为已匹配但保留默认颜色
+            // 若未找到先知元数据或元数据为白色，智能继承源图层的颜色与线型！
+            TargetColor = SourceColor;
+            TargetLinetype = !string.IsNullOrEmpty(SourceLinetype) ? SourceLinetype : "Continuous";
             Status = MatchStatus.Matched;
-            MatchNote = "手动输入指定";
+            MatchConfidence = 100;
+            MatchNote = "手动指定目标层 (继承源层外观)";
         }
 
         public Color TargetColor

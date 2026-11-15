@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows.Data;
 using System.Windows.Forms;
+using System.Windows.Media;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -285,8 +286,30 @@ namespace LayerMappingWorkbench.ViewModels
             LayerCompareItem.TargetMetaProvider = delegate(string targetName)
             {
                 if (string.IsNullOrEmpty(targetName)) return null;
-                LayerMetaInfo info;
+                LayerMetaInfo info = null;
                 if (_targetLayersMeta != null && _targetLayersMeta.TryGetValue(targetName, out info))
+                {
+                    if (info.Color != Colors.White || !string.IsNullOrEmpty(_targetDwgPath))
+                    {
+                        return new TargetVisualMeta(info.Color, info.Linetype);
+                    }
+                }
+                // 从主规则缓存中查找是否有对标该目标层的颜色
+                foreach (LayerMapRule r in _masterRuleCache.Values)
+                {
+                    if (string.Equals(r.TargetLayer, targetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!string.IsNullOrEmpty(r.TargetColorHex))
+                        {
+                            Color c = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                            if (c != Colors.White)
+                            {
+                                return new TargetVisualMeta(c, string.IsNullOrEmpty(r.TargetLinetype) ? "Continuous" : r.TargetLinetype);
+                            }
+                        }
+                    }
+                }
+                if (info != null)
                 {
                     return new TargetVisualMeta(info.Color, info.Linetype);
                 }
@@ -305,19 +328,24 @@ namespace LayerMappingWorkbench.ViewModels
                     {
                         _availableTargetLayerNames.Add(r.TargetLayer);
                     }
-                    if (!_targetLayersMeta.ContainsKey(r.TargetLayer))
+
+                    LayerMetaInfo meta;
+                    if (!_targetLayersMeta.TryGetValue(r.TargetLayer, out meta))
                     {
-                        LayerMetaInfo meta = new LayerMetaInfo();
-                        meta.Name = r.TargetLayer;
-                        if (!string.IsNullOrEmpty(r.TargetColorHex))
-                        {
-                            meta.Color = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
-                        }
-                        if (!string.IsNullOrEmpty(r.TargetLinetype))
-                        {
-                            meta.Linetype = r.TargetLinetype;
-                        }
+                        meta = new LayerMetaInfo { Name = r.TargetLayer };
                         _targetLayersMeta[r.TargetLayer] = meta;
+                    }
+                    if (!string.IsNullOrEmpty(r.TargetColorHex))
+                    {
+                        Color c = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                        if (c != Colors.White || meta.Color == Colors.White)
+                        {
+                            meta.Color = c;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(r.TargetLinetype) && !string.Equals(r.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        meta.Linetype = r.TargetLinetype;
                     }
                 }
             }
@@ -334,19 +362,24 @@ namespace LayerMappingWorkbench.ViewModels
                     {
                         _availableTargetLayerNames.Add(r.TargetLayer);
                     }
-                    if (!_targetLayersMeta.ContainsKey(r.TargetLayer))
+
+                    LayerMetaInfo meta;
+                    if (!_targetLayersMeta.TryGetValue(r.TargetLayer, out meta))
                     {
-                        LayerMetaInfo meta = new LayerMetaInfo();
-                        meta.Name = r.TargetLayer;
-                        if (!string.IsNullOrEmpty(r.TargetColorHex))
-                        {
-                            meta.Color = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
-                        }
-                        if (!string.IsNullOrEmpty(r.TargetLinetype))
-                        {
-                            meta.Linetype = r.TargetLinetype;
-                        }
+                        meta = new LayerMetaInfo { Name = r.TargetLayer };
                         _targetLayersMeta[r.TargetLayer] = meta;
+                    }
+                    if (!string.IsNullOrEmpty(r.TargetColorHex))
+                    {
+                        Color c = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                        if (c != Colors.White || meta.Color == Colors.White)
+                        {
+                            meta.Color = c;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(r.TargetLinetype) && !string.Equals(r.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                    {
+                        meta.Linetype = r.TargetLinetype;
                     }
                 }
             }
@@ -527,19 +560,25 @@ namespace LayerMappingWorkbench.ViewModels
                         }
 
                         // 将规则中固化的目标颜色与线型动态注入目标元数据字典
-                        if (!_targetLayersMeta.ContainsKey(r.TargetLayer))
+                        LayerMetaInfo meta;
+                        if (!_targetLayersMeta.TryGetValue(r.TargetLayer, out meta))
                         {
-                            LayerMetaInfo meta = new LayerMetaInfo();
+                            meta = new LayerMetaInfo();
                             meta.Name = r.TargetLayer;
-                            if (!string.IsNullOrEmpty(r.TargetColorHex))
-                            {
-                                meta.Color = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
-                            }
-                            if (!string.IsNullOrEmpty(r.TargetLinetype))
-                            {
-                                meta.Linetype = r.TargetLinetype;
-                            }
                             _targetLayersMeta[r.TargetLayer] = meta;
+                        }
+
+                        if (!string.IsNullOrEmpty(r.TargetColorHex))
+                        {
+                            Color parsedColor = LayerAlignmentEngine.ParseColorHex(r.TargetColorHex);
+                            if (parsedColor != Colors.White || meta.Color == Colors.White)
+                            {
+                                meta.Color = parsedColor;
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(r.TargetLinetype) && !string.Equals(r.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                        {
+                            meta.Linetype = r.TargetLinetype;
                         }
                     }
                 }
@@ -587,24 +626,61 @@ namespace LayerMappingWorkbench.ViewModels
                             itm.MatchConfidence = 100;
                             itm.MatchNote = "规则库命中 (" + Path.GetFileName(dlg.FileName) + ")";
 
-                            // 同步目标图层视觉属性 (颜色/线型: 优先外部DWG，其次CSV自带定义)
-                            if (_targetLayersMeta != null && _targetLayersMeta.ContainsKey(hit.TargetLayer))
+                            // 同步目标图层视觉属性 (颜色/线型: 优先外部DWG，其次CSV自带定义，再次源层继承)
+                            Color targetColor = itm.SourceColor;
+                            string targetLt = !string.IsNullOrEmpty(itm.SourceLinetype) ? itm.SourceLinetype : "Continuous";
+
+                            bool hasExternalDwg = !string.IsNullOrEmpty(_targetDwgPath) && _targetLayersMeta != null && _targetLayersMeta.ContainsKey(hit.TargetLayer);
+
+                            if (hasExternalDwg)
                             {
-                                LayerMetaInfo meta = _targetLayersMeta[hit.TargetLayer];
-                                itm.TargetColor = meta.Color;
-                                itm.TargetLinetype = meta.Linetype;
+                                LayerMetaInfo extMeta = _targetLayersMeta[hit.TargetLayer];
+                                targetColor = extMeta.Color;
+                                targetLt = extMeta.Linetype;
                             }
                             else
                             {
+                                // CSV 规则自带颜色优先
                                 if (!string.IsNullOrEmpty(hit.TargetColorHex))
                                 {
-                                    itm.TargetColor = LayerAlignmentEngine.ParseColorHex(hit.TargetColorHex);
+                                    Color c = LayerAlignmentEngine.ParseColorHex(hit.TargetColorHex);
+                                    if (c != Colors.White || itm.SourceColor == Colors.White)
+                                    {
+                                        targetColor = c;
+                                    }
                                 }
-                                if (!string.IsNullOrEmpty(hit.TargetLinetype))
+                                else if (_targetLayersMeta != null && _targetLayersMeta.ContainsKey(hit.TargetLayer) && _targetLayersMeta[hit.TargetLayer].Color != Colors.White)
                                 {
-                                    itm.TargetLinetype = hit.TargetLinetype;
+                                    targetColor = _targetLayersMeta[hit.TargetLayer].Color;
+                                }
+
+                                // CSV 规则自带线型优先
+                                if (!string.IsNullOrEmpty(hit.TargetLinetype) && !string.Equals(hit.TargetLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    targetLt = hit.TargetLinetype;
+                                }
+                                else if (_targetLayersMeta != null && _targetLayersMeta.ContainsKey(hit.TargetLayer) && !string.IsNullOrEmpty(_targetLayersMeta[hit.TargetLayer].Linetype) && !string.Equals(_targetLayersMeta[hit.TargetLayer].Linetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    targetLt = _targetLayersMeta[hit.TargetLayer].Linetype;
                                 }
                             }
+
+                            itm.TargetColor = targetColor;
+                            itm.TargetLinetype = targetLt;
+
+                            // 同步回目标元数据表，使得后续下拉框切换回此层时仍能正确呈现
+                            if (_targetLayersMeta != null)
+                            {
+                                LayerMetaInfo syncMeta;
+                                if (!_targetLayersMeta.TryGetValue(hit.TargetLayer, out syncMeta))
+                                {
+                                    syncMeta = new LayerMetaInfo { Name = hit.TargetLayer };
+                                    _targetLayersMeta[hit.TargetLayer] = syncMeta;
+                                }
+                                syncMeta.Color = targetColor;
+                                syncMeta.Linetype = targetLt;
+                            }
+
                             updatedRows++;
                         }
                     }
@@ -641,8 +717,24 @@ namespace LayerMappingWorkbench.ViewModels
                     {
                         if (!string.IsNullOrEmpty(itm.SelectedTargetLayerName))
                         {
-                            string hexColor = LayerAlignmentEngine.ColorToHex(itm.TargetColor);
-                            string lt = string.IsNullOrEmpty(itm.TargetLinetype) ? "Continuous" : itm.TargetLinetype;
+                            Color exportColor = itm.TargetColor;
+                            string exportLt = itm.TargetLinetype;
+
+                            // 若目标色仍为初始占位暗灰 (100, 110, 125) 或未定义，智能继承源图层颜色
+                            if (exportColor == Color.FromRgb(100, 110, 125) || (exportColor == Colors.White && itm.SourceColor != Colors.White && string.IsNullOrEmpty(_targetDwgPath)))
+                            {
+                                exportColor = itm.SourceColor;
+                            }
+
+                            // 若目标线型为空或 Continuous，但源图层有特殊线型，智能继承源图层线型
+                            if ((string.IsNullOrEmpty(exportLt) || string.Equals(exportLt, "Continuous", StringComparison.OrdinalIgnoreCase)) &&
+                                !string.IsNullOrEmpty(itm.SourceLinetype) && !string.Equals(itm.SourceLinetype, "Continuous", StringComparison.OrdinalIgnoreCase))
+                            {
+                                exportLt = itm.SourceLinetype;
+                            }
+
+                            string hexColor = LayerAlignmentEngine.ColorToHex(exportColor);
+                            string lt = string.IsNullOrEmpty(exportLt) ? "Continuous" : exportLt;
                             _masterRuleCache[itm.SourceLayerName] = new LayerMapRule(
                                 itm.SourceLayerName,
                                 itm.SelectedTargetLayerName,
