@@ -307,6 +307,7 @@ namespace FontWorkbench.Services
                         FontIssueItem item = new FontIssueItem();
                         item.TextStyleId = styleId;
                         item.StyleName = rec.Name;
+                        item.IsDependent = rec.IsDependent;
                         item.OriginalPrimaryFont = rec.FileName ?? "";
                         item.OriginalBigFont = rec.BigFontFileName ?? "";
 
@@ -438,9 +439,10 @@ namespace FontWorkbench.Services
         }
 
         /// <summary>
-        /// 执行批量字体修复
+        /// 执行批量字体修复 (带文档锁 DocumentLock 与外部参照 Xref 智能保护)
         /// </summary>
         public static void ApplyFontFixes(
+            Document doc,
             Database db,
             IEnumerable<FontIssueItem> itemsToFix,
             bool updateAcadFmp,
@@ -453,93 +455,152 @@ namespace FontWorkbench.Services
             mtextsCleanedCount = 0;
             fmpRulesAddedCount = 0;
 
+            if (db == null && doc != null) db = doc.Database;
+            if (db == null) return;
+
             List<KeyValuePair<string, string>> fmpMappings = new List<KeyValuePair<string, string>>();
 
-            using (Transaction tr = db.TransactionManager.StartTransaction())
+            DocumentLock docLock = null;
+            if (doc != null)
             {
-                foreach (FontIssueItem item in itemsToFix)
+                try { docLock = doc.LockDocument(); } catch { }
+            }
+
+            try
+            {
+                using (Transaction tr = db.TransactionManager.StartTransaction())
                 {
-                    if (item.TextStyleId.IsNull || !item.TextStyleId.IsValid) continue;
-
-                    TextStyleTableRecord rec = tr.GetObject(item.TextStyleId, OpenMode.ForWrite) as TextStyleTableRecord;
-                    if (rec == null) continue;
-
-                    if (item.IsTTF && !string.IsNullOrEmpty(item.TargetTtfFamily))
+                    foreach (FontIssueItem item in itemsToFix)
                     {
-                        rec.Font = new FontDescriptor(item.TargetTtfFamily, false, false, 134, 49);
-                        rec.FileName = "";
-                        rec.BigFontFileName = "";
-                        item.Status = "已修复";
-                        stylesFixedCount++;
+                        if (item.TextStyleId.IsNull || !item.TextStyleId.IsValid) continue;
 
-                        if (updateAcadFmp && !string.IsNullOrEmpty(item.OriginalTtfFace))
+                        // 外部参照 (XREF) 依赖的文字样式在宿主图中属于只读实体，通过写入 acad.fmp 映射规则全局自动解决
+                        if (item.IsDependent)
                         {
-                            fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalTtfFace, item.TargetTtfFamily));
-                        }
-                    }
-                    else
-                    {
-                        // SHX 字体替换
-                        if (!string.IsNullOrEmpty(item.TargetPrimaryFont))
-                        {
-                            rec.FileName = item.TargetPrimaryFont;
-                        }
-                        rec.BigFontFileName = item.TargetBigFont ?? "";
-                        rec.Font = new FontDescriptor("", false, false, 0, 0);
+                            item.Status = "已映射(参照)";
+                            stylesFixedCount++;
 
-                        item.Status = "已修复";
-                        stylesFixedCount++;
-
-                        if (updateAcadFmp)
-                        {
-                            if (item.IsBigFontMissing && !string.IsNullOrEmpty(item.OriginalBigFont) && !string.IsNullOrEmpty(item.TargetBigFont))
+                            if (updateAcadFmp)
                             {
-                                fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalBigFont, item.TargetBigFont));
-                            }
-                            if (item.IsPrimaryMissing && !string.IsNullOrEmpty(item.OriginalPrimaryFont) && !string.IsNullOrEmpty(item.TargetPrimaryFont))
-                            {
-                                fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalPrimaryFont, item.TargetPrimaryFont));
-                            }
-                        }
-                    }
-                }
-
-                // 清理 MText 行内字体硬编码覆盖
-                if (cleanMTextOverrides)
-                {
-                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                    if (bt != null)
-                    {
-                        foreach (ObjectId btrId in bt)
-                        {
-                            BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
-                            if (btr == null) continue;
-
-                            foreach (ObjectId entId in btr)
-                            {
-                                MText mt = tr.GetObject(entId, OpenMode.ForRead) as MText;
-                                if (mt == null) continue;
-
-                                string contents = mt.Contents;
-                                if (string.IsNullOrEmpty(contents)) continue;
-
-                                if (contents.IndexOf("\\f", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                    contents.IndexOf("\\F", StringComparison.OrdinalIgnoreCase) >= 0)
+                                if (item.IsTTF && !string.IsNullOrEmpty(item.OriginalTtfFace) && !string.IsNullOrEmpty(item.TargetTtfFamily))
                                 {
-                                    string cleaned = Regex.Replace(contents, @"\\[fF][^;]*;", "");
-                                    if (!string.Equals(contents, cleaned, StringComparison.Ordinal))
+                                    fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalTtfFace, item.TargetTtfFamily));
+                                }
+                                else
+                                {
+                                    if (item.IsBigFontMissing && !string.IsNullOrEmpty(item.OriginalBigFont) && !string.IsNullOrEmpty(item.TargetBigFont))
                                     {
-                                        mt.UpgradeOpen();
-                                        mt.Contents = cleaned;
-                                        mtextsCleanedCount++;
+                                        fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalBigFont, item.TargetBigFont));
+                                    }
+                                    if (item.IsPrimaryMissing && !string.IsNullOrEmpty(item.OriginalPrimaryFont) && !string.IsNullOrEmpty(item.TargetPrimaryFont))
+                                    {
+                                        fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalPrimaryFont, item.TargetPrimaryFont));
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+
+                        // 宿主图本地文字样式：直接安全修改文字样式表记录
+                        try
+                        {
+                            TextStyleTableRecord rec = tr.GetObject(item.TextStyleId, OpenMode.ForWrite) as TextStyleTableRecord;
+                            if (rec == null) continue;
+
+                            if (item.IsTTF && !string.IsNullOrEmpty(item.TargetTtfFamily))
+                            {
+                                rec.Font = new FontDescriptor(item.TargetTtfFamily, false, false, 134, 49);
+                                rec.FileName = "";
+                                rec.BigFontFileName = "";
+                                item.Status = "已修复";
+                                stylesFixedCount++;
+
+                                if (updateAcadFmp && !string.IsNullOrEmpty(item.OriginalTtfFace))
+                                {
+                                    fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalTtfFace, item.TargetTtfFamily));
+                                }
+                            }
+                            else
+                            {
+                                // SHX 字体替换
+                                if (!string.IsNullOrEmpty(item.TargetPrimaryFont))
+                                {
+                                    rec.FileName = item.TargetPrimaryFont;
+                                }
+                                rec.BigFontFileName = item.TargetBigFont ?? "";
+                                rec.Font = new FontDescriptor("", false, false, 0, 0);
+
+                                item.Status = "已修复";
+                                stylesFixedCount++;
+
+                                if (updateAcadFmp)
+                                {
+                                    if (item.IsBigFontMissing && !string.IsNullOrEmpty(item.OriginalBigFont) && !string.IsNullOrEmpty(item.TargetBigFont))
+                                    {
+                                        fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalBigFont, item.TargetBigFont));
+                                    }
+                                    if (item.IsPrimaryMissing && !string.IsNullOrEmpty(item.OriginalPrimaryFont) && !string.IsNullOrEmpty(item.TargetPrimaryFont))
+                                    {
+                                        fmpMappings.Add(new KeyValuePair<string, string>(item.OriginalPrimaryFont, item.TargetPrimaryFont));
                                     }
                                 }
                             }
                         }
+                        catch { }
                     }
-                }
 
-                tr.Commit();
+                    // 清理 MText 行内字体硬编码覆盖 (严格跳过外部参照块，杜绝 eLockViolation / eNotApplicable)
+                    if (cleanMTextOverrides)
+                    {
+                        try
+                        {
+                            BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                            if (bt != null)
+                            {
+                                foreach (ObjectId btrId in bt)
+                                {
+                                    BlockTableRecord btr = tr.GetObject(btrId, OpenMode.ForRead) as BlockTableRecord;
+                                    if (btr == null || btr.IsFromExternalReference || btr.IsDependent) continue;
+
+                                    foreach (ObjectId entId in btr)
+                                    {
+                                        try
+                                        {
+                                            MText mt = tr.GetObject(entId, OpenMode.ForRead) as MText;
+                                            if (mt == null) continue;
+
+                                            string contents = mt.Contents;
+                                            if (string.IsNullOrEmpty(contents)) continue;
+
+                                            if (contents.IndexOf("\\f", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                contents.IndexOf("\\F", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            {
+                                                string cleaned = Regex.Replace(contents, @"\\[fF][^;]*;", "");
+                                                if (!string.Equals(contents, cleaned, StringComparison.Ordinal))
+                                                {
+                                                    mt.UpgradeOpen();
+                                                    mt.Contents = cleaned;
+                                                    mtextsCleanedCount++;
+                                                }
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    tr.Commit();
+                }
+            }
+            finally
+            {
+                if (docLock != null)
+                {
+                    try { docLock.Dispose(); } catch { }
+                }
             }
 
             // 同步写入 acad.fmp
@@ -551,10 +612,30 @@ namespace FontWorkbench.Services
             // 触发全图显式重生成，确保所有视口文字立即脱去问号恢复显示
             try
             {
-                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-                ed.Regen();
+                if (doc != null && doc.Editor != null)
+                {
+                    doc.Editor.Regen();
+                }
+                else
+                {
+                    Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                    if (ed != null) ed.Regen();
+                }
             }
             catch { }
+        }
+
+        public static void ApplyFontFixes(
+            Database db,
+            IEnumerable<FontIssueItem> itemsToFix,
+            bool updateAcadFmp,
+            bool cleanMTextOverrides,
+            out int stylesFixedCount,
+            out int mtextsCleanedCount,
+            out int fmpRulesAddedCount)
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            ApplyFontFixes(doc, db, itemsToFix, updateAcadFmp, cleanMTextOverrides, out stylesFixedCount, out mtextsCleanedCount, out fmpRulesAddedCount);
         }
 
         /// <summary>

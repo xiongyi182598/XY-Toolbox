@@ -365,6 +365,19 @@ namespace FontWorkbench.Views
 
         public static void ShowDialog(Database db)
         {
+            Document doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            ShowDialog(doc, db);
+        }
+
+        public static void ShowDialog(Document doc)
+        {
+            ShowDialog(doc, doc != null ? doc.Database : null);
+        }
+
+        public static void ShowDialog(Document doc, Database db)
+        {
+            if (doc == null && db == null) return;
+            if (db == null && doc != null) db = doc.Database;
             if (db == null) return;
 
             try
@@ -373,7 +386,7 @@ namespace FontWorkbench.Views
                 Window win = XamlReader.Parse(sr.ReadToEnd()) as Window;
                 if (win == null) return;
 
-                FontFixViewModel vm = new FontFixViewModel(db);
+                FontFixViewModel vm = new FontFixViewModel(doc, db);
                 win.DataContext = vm;
 
                 Button btnClose = win.FindName("BtnClose") as Button;

@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using FontWorkbench.Models;
 using FontWorkbench.Services;
@@ -44,6 +45,7 @@ namespace FontWorkbench.ViewModels
 
     public class FontFixViewModel : INotifyPropertyChanged
     {
+        private readonly Document _document;
         private readonly Database _database;
         private ObservableCollection<FontIssueItem> _items;
         private ICollectionView _filteredView;
@@ -201,9 +203,14 @@ namespace FontWorkbench.ViewModels
             if (handler != null) handler();
         }
 
-        public FontFixViewModel(Database database)
+        public FontFixViewModel(Database database) : this(Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument, database)
         {
-            _database = database;
+        }
+
+        public FontFixViewModel(Document document, Database database)
+        {
+            _document = document;
+            _database = database ?? (document != null ? document.Database : null);
             _items = new ObservableCollection<FontIssueItem>();
 
             QuickFixAllCommand = new FontRelayCommand(OnQuickFixAll);
@@ -334,6 +341,7 @@ namespace FontWorkbench.ViewModels
             try
             {
                 FontDiagnosisService.ApplyFontFixes(
+                    _document,
                     _database,
                     itemsToFix,
                     _updateAcadFmp,
@@ -344,7 +352,7 @@ namespace FontWorkbench.ViewModels
 
                 string msg = string.Format(
                     "🎉 字体修复与问号消除圆满完成！\n\n" +
-                    "✔ 成功修复文字样式: {0} 个\n" +
+                    "✔ 成功修复/映射文字样式: {0} 个\n" +
                     "✔ 清除多行文字行内格式代码: {1} 处\n" +
                     "✔ 写入本机永久 acad.fmp 映射表: {2} 条规则\n\n" +
                     "视口已完成重生成，全图所有 '?????' 字符均已恢复正常显示！",
@@ -352,8 +360,8 @@ namespace FontWorkbench.ViewModels
 
                 MessageBox.Show(msg, "XY-Toolbox 字体修复报告", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                // 重新刷新视图
-                if (_filteredView != null) _filteredView.Refresh();
+                // 修复后自动重新体检，让界面列表与统计计数即时同步最新状态
+                RunDiagnosis();
             }
             catch (Exception ex)
             {

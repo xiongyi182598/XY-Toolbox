@@ -339,7 +339,7 @@ namespace XY_Deepening_Toolbox
 
     public class Commands
     {
-        public static readonly int CurrentBuildVersion = 198;
+        public static readonly int CurrentBuildVersion = 199;
 
         public static string GetApplicationDirectory()
         {
@@ -2122,7 +2122,7 @@ namespace XY_Deepening_Toolbox
             if (doc == null) return;
             try
             {
-                FontWorkbench.Views.FontFixDialog.ShowDialog(doc.Database);
+                FontWorkbench.Views.FontFixDialog.ShowDialog(doc, doc.Database);
             }
             catch (System.Exception ex)
             {

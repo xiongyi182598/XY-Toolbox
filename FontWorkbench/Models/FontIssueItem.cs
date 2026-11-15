@@ -35,6 +35,7 @@ namespace FontWorkbench.Models
         public bool IsPrimaryMissing { get; set; }
         public bool IsBigFontMissing { get; set; }
         public bool HasChineseEntities { get; set; }
+        public bool IsDependent { get; set; }
         public FontIssueType IssueType { get; set; }
         public string IssueDescription { get; set; }
         public int AffectedEntityCount { get; set; }
