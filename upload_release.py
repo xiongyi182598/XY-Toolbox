@@ -122,8 +122,7 @@ with open_with_retry(req) as resp:
     existing_assets = json.loads(resp.read().decode('utf-8'))
 
 files_to_upload = [
-    os.path.join(OUT_DIR, "XY_Toolbox_Update.zip"),
-    os.path.join(OUT_DIR, f"XY工具箱_{TAG}_完整绿色独立版.zip")
+    os.path.join(OUT_DIR, f) for f in os.listdir(OUT_DIR) if f.endswith(".zip")
 ]
 
 for file_path in files_to_upload:
