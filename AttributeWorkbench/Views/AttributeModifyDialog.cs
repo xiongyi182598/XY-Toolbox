@@ -895,9 +895,9 @@ namespace AttributeWorkbench.Views
                         {
                             int moveCount = AttributeModifyService.MoveAttributePosition(db, _target, wcsDisp, syncAll, allowedIds, moveAll);
                             // 关键修复：即时更新 _target.PickedPoint 为平移后的最新绝对基点！
-                            // 确保在同一面板内多次连续点击平移时，基点始终紧跟文字最新所在位置，绝不固定在旧位置导致方向错乱
                             _target.PickedPoint = actualBasePoint + wcsDisp;
-                            ed.Regen();
+                            // 彻底消除 Regen 带来的全屏黑屏闪烁，采用轻量平滑的 UpdateScreen 瞬时无闪刷新
+                            try { ed.UpdateScreen(); } catch { }
                             string scopeNote = syncAll
                                 ? string.Format("同步更新了 {0} 处图块{1}", moveCount, useWindowSel && allowedIds != null ? "（框选范围）" : "（全图）")
                                 : "仅当前单图块";

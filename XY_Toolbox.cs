@@ -339,7 +339,7 @@ namespace XY_Deepening_Toolbox
 
     public class Commands
     {
-        public static readonly int CurrentBuildVersion = 199;
+        public static readonly int CurrentBuildVersion = 201;
 
         public static string GetApplicationDirectory()
         {
@@ -5317,23 +5317,59 @@ namespace XY_Deepening_Toolbox
                             totalLen += (c <= 127) ? charWidth * 0.65 : charWidth * 1.0;
                         }
 
-                        // 关键核心：无论原属性是 BaseLeft 还是 MiddleCenter/Center/Right，统一逆向解算为 BaseLeft 硬件绝对锚点
-                        Point3d baseLeft = textAnchor;
-                        if (att.Justify == AttachmentPoint.MiddleCenter || att.Justify == AttachmentPoint.MiddleMid)
-                        {
-                            baseLeft = textAnchor - dir * (totalLen * 0.5) - up * (h * 0.4);
-                        }
-                        else if (att.Justify == AttachmentPoint.BaseCenter || att.Justify == AttachmentPoint.TopCenter || att.Justify == AttachmentPoint.BottomCenter)
-                        {
-                            baseLeft = textAnchor - dir * (totalLen * 0.5);
-                        }
-                        else if (att.Justify == AttachmentPoint.MiddleRight || att.Justify == AttachmentPoint.TopRight || att.Justify == AttachmentPoint.BottomRight || att.Justify == AttachmentPoint.BaseRight)
-                        {
-                            baseLeft = textAnchor - dir * totalLen;
-                        }
-                        else if (att.Justify == AttachmentPoint.BaseLeft)
+                        // 关键核心：准确获取/解算文字的绝对 BaseLeft 锚点
+                        // 1. 若属性本身在数据库中已有效存储了 Position（非 BaseLeft 属性的 Position 即为 AutoCAD 维护的 BaseLeft），直接优先使用
+                        Point3d baseLeft = att.Position;
+                        if (att.Justify == AttachmentPoint.BaseLeft)
                         {
                             baseLeft = att.Position;
+                        }
+                        else if (!att.Position.IsEqualTo(Point3d.Origin) && !att.Position.IsEqualTo(textAnchor))
+                        {
+                            baseLeft = att.Position;
+                        }
+                        else
+                        {
+                            // 2. 兜底几何反解：完整覆盖所有 14 种 AttachmentPoint 对齐方式（含 MiddleLeft、TopLeft、BottomLeft 等）
+                            double uOffset = 0;
+                            double vOffset = 0;
+
+                            switch (att.Justify)
+                            {
+                                case AttachmentPoint.BaseLeft:
+                                    uOffset = 0; vOffset = 0; break;
+                                case AttachmentPoint.BaseCenter:
+                                    uOffset = totalLen * 0.5; vOffset = 0; break;
+                                case AttachmentPoint.BaseRight:
+                                    uOffset = totalLen; vOffset = 0; break;
+
+                                case AttachmentPoint.BottomLeft:
+                                    uOffset = 0; vOffset = -h * 0.15; break;
+                                case AttachmentPoint.BottomCenter:
+                                    uOffset = totalLen * 0.5; vOffset = -h * 0.15; break;
+                                case AttachmentPoint.BottomRight:
+                                    uOffset = totalLen; vOffset = -h * 0.15; break;
+
+                                case AttachmentPoint.MiddleLeft:
+                                    uOffset = 0; vOffset = h * 0.4; break;
+                                case AttachmentPoint.MiddleCenter:
+                                case AttachmentPoint.MiddleMid:
+                                    uOffset = totalLen * 0.5; vOffset = h * 0.4; break;
+                                case AttachmentPoint.MiddleRight:
+                                    uOffset = totalLen; vOffset = h * 0.4; break;
+
+                                case AttachmentPoint.TopLeft:
+                                    uOffset = 0; vOffset = h * 0.85; break;
+                                case AttachmentPoint.TopCenter:
+                                    uOffset = totalLen * 0.5; vOffset = h * 0.85; break;
+                                case AttachmentPoint.TopRight:
+                                    uOffset = totalLen; vOffset = h * 0.85; break;
+
+                                default:
+                                    uOffset = totalLen * 0.5; vOffset = h * 0.4; break;
+                            }
+
+                            baseLeft = textAnchor - dir * uOffset - up * vOffset;
                         }
 
                         _previewItems.Add(new PreviewItem

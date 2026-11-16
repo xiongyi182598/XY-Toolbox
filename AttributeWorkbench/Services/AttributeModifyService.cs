@@ -875,9 +875,7 @@ namespace AttributeWorkbench.Services
                 BlockReference currentBlk = tr.GetObject(target.ParentBlockId, OpenMode.ForRead) as BlockReference;
                 if (currentBlk == null) return 0;
 
-                // ── 1. 修改当前选中的图块实例，并精确提取更新后的绝对 WCS 视觉中心点 (Visual Center)
-                Dictionary<string, Point3d> newWcsCenterMap = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
-
+                // ── 1. 修改当前选中的图块实例（绝对精确的纯矢量平移，杜绝字符估算误差）
                 foreach (ObjectId attId in currentBlk.AttributeCollection)
                 {
                     AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
@@ -887,21 +885,9 @@ namespace AttributeWorkbench.Services
                         try { att.LockPositionInBlock = false; } catch { }
                         TranslateText(att, wcsDisp);
                         att.RecordGraphicsModified(true);
-
-                        Point3d anchor = GetTextAnchor(att);
-
-                        double h = att.Height > 0.001 ? att.Height : 200.0;
-                        double wf = att.WidthFactor > 0.01 ? att.WidthFactor : 0.7;
-                        double len = EstimateTextLength(att.TextString, h, wf);
-                        double rot = att.Rotation;
-                        Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
-                        Vector3d up = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
-                        Vector3d offset = GetOffsetFromAnchorToCenter(att.Justify, len, h, dir, up);
-                        Point3d visualCenter = anchor + offset;
-
-                        newWcsCenterMap[att.Tag] = visualCenter;
                     }
                 }
+                try { currentBlk.UpgradeOpen(); currentBlk.RecordGraphicsModified(true); } catch { }
                 syncCount++;
 
                 // ── 同步更新 target 内存对象的基准坐标与多部件坐标，杜绝连续多次平移时基点锁死旧位置导致方向错乱
@@ -925,15 +911,11 @@ namespace AttributeWorkbench.Services
                     return syncCount;
                 }
 
-                // ── 2. 将选定图块的视觉中心点反向逆变换至母块局部坐标空间 (OCS / Block Definition Space)
+                // ── 2. 将世界坐标系位移 wcsDisp 逆变换至母块局部坐标空间 (OCS / Block Definition Space)
+                // 彻底解决不同比例、旋转、镜像下的文字漂移问题（基于严密数学矩阵变换，彻底告别字符长度估算误差）
                 Matrix3d invTargetMat = Matrix3d.Identity;
                 try { invTargetMat = currentBlk.BlockTransform.Inverse(); } catch { }
-                Dictionary<string, Point3d> localCenterMap = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (KeyValuePair<string, Point3d> kvp in newWcsCenterMap)
-                {
-                    localCenterMap[kvp.Key] = kvp.Value.TransformBy(invTargetMat);
-                }
+                Vector3d localDisp = wcsDisp.TransformBy(invTargetMat);
 
                 // ── 3. 更新母块定义 (BlockTableRecord) 中的 AttributeDefinition 坐标
                 BlockTableRecord btr = tr.GetObject(target.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
@@ -942,27 +924,16 @@ namespace AttributeWorkbench.Services
                     foreach (ObjectId entId in btr)
                     {
                         AttributeDefinition attDef = tr.GetObject(entId, OpenMode.ForRead) as AttributeDefinition;
-                        if (attDef != null && localCenterMap.ContainsKey(attDef.Tag))
+                        if (attDef != null && movingTags.Contains(attDef.Tag))
                         {
-                            Point3d locCenter = localCenterMap[attDef.Tag];
                             attDef.UpgradeOpen();
-
-                            double hDef = attDef.Height > 0.001 ? attDef.Height : 200.0;
-                            double wfDef = attDef.WidthFactor > 0.01 ? attDef.WidthFactor : 0.7;
-                            string defText = !string.IsNullOrEmpty(attDef.TextString) ? attDef.TextString : attDef.Tag;
-                            double lenDef = EstimateTextLength(defText, hDef, wfDef);
-                            double rotDef = attDef.Rotation;
-                            Vector3d dirDef = new Vector3d(Math.Cos(rotDef), Math.Sin(rotDef), 0);
-                            Vector3d upDef = new Vector3d(-Math.Sin(rotDef), Math.Cos(rotDef), 0);
-                            Vector3d offsetDef = GetOffsetFromAnchorToCenter(attDef.Justify, lenDef, hDef, dirDef, upDef);
-                            Point3d anchorDef = locCenter - offsetDef;
-                            SetTextLocation(attDef, anchorDef);
+                            TranslateText(attDef, localDisp);
                             attDef.RecordGraphicsModified(true);
                         }
                     }
                 }
 
-                // ── 4. 全图所有同名块正向投影重对齐 (基于视觉中心映射，彻底解决旋转与镜像问题)
+                // ── 4. 全图所有同名块正向投影同步平移 (基于母块局部空间位移投影，严格保持几何相对关系与门编号指哪到哪)
                 foreach (ObjectId refId in target.AllBlockReferenceIds)
                 {
                     if (refId == target.ParentBlockId) continue; // 当前块已在第一步更新
@@ -972,35 +943,27 @@ namespace AttributeWorkbench.Services
                     BlockReference bRef = tr.GetObject(refId, OpenMode.ForRead) as BlockReference;
                     if (bRef == null) continue;
 
+                    // 计算此图块实例在 WCS 下的实际位移向量
+                    Vector3d instDisp = localDisp.TransformBy(bRef.BlockTransform);
+
                     bool touched = false;
                     foreach (ObjectId attId in bRef.AttributeCollection)
                     {
                         AttributeReference att = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                        if (att != null && localCenterMap.ContainsKey(att.Tag))
+                        if (att != null && movingTags.Contains(att.Tag))
                         {
-                            Point3d locCenter = localCenterMap[att.Tag];
-                            Point3d targetWcsCenter = locCenter.TransformBy(bRef.BlockTransform);
-
                             att.UpgradeOpen();
                             try { att.LockPositionInBlock = false; } catch { }
-
-                            // 规范化文字旋转角度，确保保持易读（不倒立）
-                            double rot = NormalizeAngleReadable(att.Rotation);
-                            att.Rotation = rot;
-
-                            double h = att.Height > 0.001 ? att.Height : 200.0;
-                            double wf = att.WidthFactor > 0.01 ? att.WidthFactor : 0.7;
-                            double len = EstimateTextLength(att.TextString, h, wf);
-                            Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
-                            Vector3d up = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
-                            Vector3d offset = GetOffsetFromAnchorToCenter(att.Justify, len, h, dir, up);
-                            Point3d targetAnchor = targetWcsCenter - offset;
-                            SetTextLocation(att, targetAnchor);
+                            TranslateText(att, instDisp);
                             att.RecordGraphicsModified(true);
                             touched = true;
                         }
                     }
-                    if (touched) syncCount++;
+                    if (touched)
+                    {
+                        try { bRef.UpgradeOpen(); bRef.RecordGraphicsModified(true); } catch { }
+                        syncCount++;
+                    }
                 }
 
                 tr.Commit();
@@ -1151,15 +1114,6 @@ namespace AttributeWorkbench.Services
                 try
                 {
                     txt.AlignmentPoint = txt.AlignmentPoint + disp;
-                    Database db = txt.Database;
-                    if (db == null)
-                    {
-                        try { db = HostApplicationServices.WorkingDatabase; } catch { }
-                    }
-                    if (db != null)
-                    {
-                        try { txt.AdjustAlignment(db); } catch { }
-                    }
                 }
                 catch { }
             }
