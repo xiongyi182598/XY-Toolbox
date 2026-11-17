@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -42,8 +42,8 @@ namespace XY_Toolbox
     public static class UpdateService
     {
         // 本地当前版本常量
-        public const string CURRENT_VERSION = "1.2.1";
-        public const int CURRENT_VERSION_CODE = 147;
+        public const string CURRENT_VERSION = "1.3.0";
+        public const int CURRENT_VERSION_CODE = 201;
         public const string GITHUB_REPO_URL = "https://github.com/xiongyi182598/XY-Toolbox";
 
         // 多镜像版本信息地址源（优先国内加速通道）
@@ -793,65 +793,84 @@ namespace XY_Toolbox
                 }
                 catch { }
 
+                // 生成独立的 PowerShell 脚本（比 BAT 更可靠，避免延迟变量展开嵌套问题）
+                string ps1Path = Path.Combine(rootDir, "_apply_restart.ps1");
+                StringBuilder ps1 = new StringBuilder();
+                ps1.AppendLine("param()");
+                ps1.AppendLine("$ErrorActionPreference = 'SilentlyContinue'");
+                ps1.AppendLine("$rootDir = '" + rootDir.Replace("'", "''") + "'");
+                ps1.AppendLine("$acadExe = '" + acadExe.Replace("'", "''") + "'");
+                ps1.AppendLine("$srcDir  = '" + (targetContentDir ?? "").Replace("'", "''") + "'");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 1. 等待 acad.exe 完全退出（最多 15 秒，超过则强杀）");
+                ps1.AppendLine("$w = 0");
+                ps1.AppendLine("while ($w -lt 15) {");
+                ps1.AppendLine("    Start-Sleep -Seconds 1");
+                ps1.AppendLine("    $proc = Get-Process -Name 'acad' -ErrorAction SilentlyContinue");
+                ps1.AppendLine("    if (-not $proc) { break }");
+                ps1.AppendLine("    $w++");
+                ps1.AppendLine("    if ($w -ge 5) { $proc | Stop-Process -Force }");
+                ps1.AppendLine("}");
+                ps1.AppendLine("Start-Sleep -Seconds 1");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 2. 清理 cache 目录");
+                ps1.AppendLine("$cd = Join-Path $rootDir 'cache'");
+                ps1.AppendLine("if (Test-Path $cd) { Remove-Item $cd -Recurse -Force }");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 3. 覆盖解压文件");
+                ps1.AppendLine("function Copy-Dir($src, $dst) {");
+                ps1.AppendLine("    if (-not $src -or -not (Test-Path $src)) { return }");
+                ps1.AppendLine("    Get-ChildItem $src -Recurse | Where-Object { -not $_.PSIsContainer } | ForEach-Object {");
+                ps1.AppendLine("        $rel  = $_.FullName.Substring($src.Length).TrimStart([char]92,[char]47)");
+                ps1.AppendLine("        $dest = Join-Path $dst $rel");
+                ps1.AppendLine("        $dir  = Split-Path -Parent $dest");
+                ps1.AppendLine("        if (-not (Test-Path $dir)) { New-Item -ItemType Directory $dir -Force | Out-Null }");
+                ps1.AppendLine("        Copy-Item $_.FullName $dest -Force");
+                ps1.AppendLine("    }");
+                ps1.AppendLine("}");
+                ps1.AppendLine("Copy-Dir $srcDir $rootDir");
+                ps1.AppendLine("$pd = Join-Path $rootDir 'pending_update'");
+                ps1.AppendLine("Copy-Dir $pd $rootDir");
+                ps1.AppendLine("if (Test-Path $pd) { Remove-Item $pd -Recurse -Force }");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 4. 精确选取版本号最大的 XY_Toolbox_NNN.dll 覆盖母体，并清理旧版");
+                ps1.AppendLine("$best = Get-ChildItem -Path $rootDir -Filter 'XY_Toolbox_*.dll' |");
+                ps1.AppendLine("        Where-Object { $_.BaseName -match '^XY_Toolbox_(\\d+)$' } |");
+                ps1.AppendLine("        Sort-Object { [int]($_.BaseName -replace '^XY_Toolbox_','') } -Descending |");
+                ps1.AppendLine("        Select-Object -First 1");
+                ps1.AppendLine("if ($best) {");
+                ps1.AppendLine("    Copy-Item $best.FullName (Join-Path $rootDir 'XY_Toolbox.dll') -Force");
+                ps1.AppendLine("    Get-ChildItem -Path $rootDir -Filter 'XY_Toolbox_*.dll' |");
+                ps1.AppendLine("        Where-Object { $_.FullName -ne $best.FullName } |");
+                ps1.AppendLine("        Remove-Item -Force");
+                ps1.AppendLine("}");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 5. 清理辅助文件");
+                ps1.AppendLine("@('apply_update.bat','run_updater.bat','restart_apply.bat') | ForEach-Object {");
+                ps1.AppendLine("    $f = Join-Path $rootDir $_; if (Test-Path $f) { Remove-Item $f -Force }");
+                ps1.AppendLine("}");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 6. 重新启动 AutoCAD");
+                ps1.AppendLine("if ($acadExe -and (Test-Path $acadExe)) {");
+                ps1.AppendLine("    Start-Process $acadExe");
+                ps1.AppendLine("} else {");
+                ps1.AppendLine("    Start-Process 'acad.exe'");
+                ps1.AppendLine("}");
+                ps1.AppendLine("");
+                ps1.AppendLine("# 7. 自删脚本");
+                ps1.AppendLine("Start-Sleep -Seconds 2");
+                ps1.AppendLine("Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue");
+
+                File.WriteAllText(ps1Path, ps1.ToString(), Encoding.UTF8);
+
+                // BAT 只负责调用 PS1，彻底绕开 BAT 延迟变量展开的所有坑
                 string batPath = Path.Combine(rootDir, "_apply_restart.bat");
                 StringBuilder sb = new StringBuilder();
                 sb.AppendLine("@echo off");
-                sb.AppendLine("chcp 936 >nul 2>&1");
-                sb.AppendLine("setlocal enabledelayedexpansion");
-                sb.AppendLine("title XY工具箱 - 正在无感应用升级并重启CAD...");
+                sb.AppendLine("chcp 65001 >nul 2>&1");
+                sb.AppendLine("title XY工具箱 - 正在应用升级并重启CAD...");
                 sb.AppendLine("cd /d \"" + rootDir + "\"");
-                sb.AppendLine("");
-                sb.AppendLine(":: 1. 等待原 AutoCAD 进程完全退出释放文件锁");
-                sb.AppendLine("set /a wait_cnt=0");
-                sb.AppendLine(":wait_loop");
-                sb.AppendLine("timeout /t 1 /nobreak >nul");
-                sb.AppendLine("tasklist /fi \"imagename eq acad.exe\" 2>nul | findstr /i \"acad.exe\" >nul");
-                sb.AppendLine("if !errorlevel! equ 0 (");
-                sb.AppendLine("    set /a wait_cnt+=1");
-                sb.AppendLine("    if !wait_cnt! geq 3 (");
-                sb.AppendLine("        taskkill /f /im acad.exe >nul 2>&1");
-                sb.AppendLine("    )");
-                sb.AppendLine("    if !wait_cnt! leq 10 goto wait_loop");
-                sb.AppendLine(")");
-                sb.AppendLine("timeout /t 1 /nobreak >nul");
-                sb.AppendLine("");
-                sb.AppendLine(":: 2. 彻底清理旧 cache 幽灵目录");
-                sb.AppendLine("if exist \"cache\" rd /s /q \"cache\" >nul 2>&1");
-                sb.AppendLine("");
-                sb.AppendLine(":: 3. 从解压目录或 pending_update 将全套文件物理覆盖至工具箱主目录");
-                if (!string.IsNullOrEmpty(targetContentDir) && Directory.Exists(targetContentDir))
-                {
-                    sb.AppendLine("if exist \"" + targetContentDir + "\" (");
-                    sb.AppendLine("    xcopy /y /e /q \"" + targetContentDir + "\\*.*\" \".\" >nul 2>&1");
-                    sb.AppendLine(")");
-                }
-                sb.AppendLine("if exist \"pending_update\" (");
-                sb.AppendLine("    xcopy /y /e /q \"pending_update\\*.*\" \".\" >nul 2>&1");
-                sb.AppendLine("    rd /s /q \"pending_update\" >nul 2>&1");
-                sb.AppendLine(")");
-                sb.AppendLine("");
-                sb.AppendLine(":: 4. 确保母体 XY_Toolbox.dll 与最新代号 DLL 100% 同步覆盖");
-                sb.AppendLine("for %%f in (XY_Toolbox_*.dll) do (");
-                sb.AppendLine("    copy /y \"%%f\" \"XY_Toolbox.dll\" >nul 2>&1");
-                sb.AppendLine(")");
-                sb.AppendLine("");
-                sb.AppendLine(":: 5. 清理历史辅助批处理");
-                sb.AppendLine("if exist \"apply_update.bat\" del /f /q \"apply_update.bat\" >nul 2>&1");
-                sb.AppendLine("if exist \"run_updater.bat\" del /f /q \"run_updater.bat\" >nul 2>&1");
-                sb.AppendLine("if exist \"restart_apply.bat\" del /f /q \"restart_apply.bat\" >nul 2>&1");
-                sb.AppendLine("");
-                sb.AppendLine(":: 6. 重新启动 AutoCAD");
-                if (!string.IsNullOrEmpty(acadExe))
-                {
-                    sb.AppendLine("if exist \"" + acadExe + "\" (");
-                    sb.AppendLine("    start \"\" \"" + acadExe + "\"");
-                    sb.AppendLine("    goto cleanup");
-                    sb.AppendLine(")");
-                }
-                sb.AppendLine("start \"\" acad.exe");
-                sb.AppendLine("");
-                sb.AppendLine(":cleanup");
-                sb.AppendLine("timeout /t 1 /nobreak >nul");
+                sb.AppendLine("powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"_apply_restart.ps1\"");
                 sb.AppendLine("(goto) 2>nul & del \"%~f0\"");
 
                 File.WriteAllText(batPath, sb.ToString(), Encoding.GetEncoding(936));
