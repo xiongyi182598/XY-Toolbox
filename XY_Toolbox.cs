@@ -5256,6 +5256,20 @@ namespace XY_Deepening_Toolbox
 
     public class AttributeTextMoveJig : DrawJig
     {
+        /// <summary>
+        /// 纯数据结构，仅含值类型，不持有任何 DBObject 引用
+        /// 专用于 Jig 预览，彻底避免事务外访问游离 DBObject 导致 Access Violation 崩溃
+        /// </summary>
+        public struct JigPreviewData
+        {
+            public string Text;
+            public Point3d AnchorPos;    // WCS 下文字基准锚点
+            public AttachmentPoint Justify;
+            public double Rotation;
+            public double Height;
+            public double WidthFactor;
+        }
+
         private class PreviewItem
         {
             public string Text;
@@ -5276,6 +5290,96 @@ namespace XY_Deepening_Toolbox
             get { return _basePoint.GetVectorTo(_currentPoint); }
         }
 
+        /// <summary>
+        /// 推荐构造函数：接受纯值数据，无任何 DBObject 引用，不会因事务生命周期问题崩溃
+        /// </summary>
+        public AttributeTextMoveJig(Point3d basePoint, List<JigPreviewData> previews)
+        {
+            _basePoint    = basePoint;
+            _currentPoint = basePoint;
+            _previewItems = new List<PreviewItem>();
+
+            if (previews == null || previews.Count == 0)
+            {
+                _previewItems.Add(new PreviewItem {
+                    Text = "文字", BasePos = basePoint,
+                    Direction = Vector3d.XAxis, Normal = Vector3d.ZAxis,
+                    Height = 200.0, WidthFactor = 0.7, Entity = null
+                });
+                return;
+            }
+
+            foreach (JigPreviewData d in previews)
+            {
+                if (string.IsNullOrEmpty(d.Text)) continue;
+                try
+                {
+                    double rot = d.Rotation;
+                    Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
+                    Vector3d up  = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
+                    double h  = d.Height > 0.001 ? d.Height : 200.0;
+                    double wf = d.WidthFactor > 0.01 ? d.WidthFactor : 0.7;
+
+                    // 把锚点还原为 BaseLeft（文字起始点），供 WorldDraw Text() 直接使用
+                    Point3d baseLeft = ResolveBaseLeft(d.AnchorPos, d.Justify, d.Text, h, wf, dir, up);
+
+                    _previewItems.Add(new PreviewItem {
+                        Text = d.Text, BasePos = baseLeft,
+                        Direction = dir, Normal = Vector3d.ZAxis,
+                        Height = h, WidthFactor = wf, Entity = null
+                    });
+                }
+                catch { }
+            }
+
+            if (_previewItems.Count == 0)
+            {
+                _previewItems.Add(new PreviewItem {
+                    Text = previews[0].Text ?? "文字", BasePos = basePoint,
+                    Direction = Vector3d.XAxis, Normal = Vector3d.ZAxis,
+                    Height = previews[0].Height > 0.001 ? previews[0].Height : 200.0,
+                    WidthFactor = 0.7, Entity = null
+                });
+            }
+        }
+
+        /// <summary>
+        /// 把任意对齐方式的锚点反解为 BaseLeft 起点
+        /// </summary>
+        private static Point3d ResolveBaseLeft(Point3d anchor, AttachmentPoint justify, string text,
+            double h, double wf, Vector3d dir, Vector3d up)
+        {
+            if (justify == AttachmentPoint.BaseLeft) return anchor;
+
+            double charW = h * wf;
+            double totalLen = 0;
+            foreach (char c in text)
+                totalLen += (c <= 127) ? charW * 0.65 : charW * 1.0;
+
+            double uOff = 0, vOff = 0;
+            switch (justify)
+            {
+                case AttachmentPoint.BaseCenter:   uOff = totalLen * 0.5; vOff = 0; break;
+                case AttachmentPoint.BaseRight:    uOff = totalLen;       vOff = 0; break;
+                case AttachmentPoint.BottomLeft:   uOff = 0;              vOff = -h * 0.15; break;
+                case AttachmentPoint.BottomCenter: uOff = totalLen * 0.5; vOff = -h * 0.15; break;
+                case AttachmentPoint.BottomRight:  uOff = totalLen;       vOff = -h * 0.15; break;
+                case AttachmentPoint.MiddleLeft:   uOff = 0;              vOff = h * 0.4; break;
+                case AttachmentPoint.MiddleCenter:
+                case AttachmentPoint.MiddleMid:    uOff = totalLen * 0.5; vOff = h * 0.4; break;
+                case AttachmentPoint.MiddleRight:  uOff = totalLen;       vOff = h * 0.4; break;
+                case AttachmentPoint.TopLeft:      uOff = 0;              vOff = h * 0.85; break;
+                case AttachmentPoint.TopCenter:    uOff = totalLen * 0.5; vOff = h * 0.85; break;
+                case AttachmentPoint.TopRight:     uOff = totalLen;       vOff = h * 0.85; break;
+                default:                           uOff = totalLen * 0.5; vOff = h * 0.4;  break;
+            }
+            return anchor - dir * uOff - up * vOff;
+        }
+
+        /// <summary>
+        /// 兼容旧调用：从 AttributeReference 集合构造（在事务内调用才安全）
+        /// 注意：attRefs 必须在事务内处于有效 Open 状态时调用此构造函数
+        /// </summary>
         public AttributeTextMoveJig(Point3d basePoint, IEnumerable<AttributeReference> attRefs, Database db = null, string fallbackText = null, double fallbackHeight = 0)
         {
             _basePoint    = basePoint;
@@ -5286,13 +5390,11 @@ namespace XY_Deepening_Toolbox
             {
                 foreach (AttributeReference att in attRefs)
                 {
-                    if (att == null) continue;
+                    if (att == null || att.IsErased || !att.IsReadEnabled) continue;
 
                     string textStr = att.TextString;
                     if (string.IsNullOrEmpty(textStr) && !string.IsNullOrEmpty(fallbackText))
-                    {
                         textStr = fallbackText;
-                    }
                     if (string.IsNullOrEmpty(textStr)) continue;
 
                     try
@@ -5301,106 +5403,32 @@ namespace XY_Deepening_Toolbox
                         double wf = att.WidthFactor > 0.01 ? att.WidthFactor : 0.7;
                         double rot = att.Rotation;
                         Vector3d dir = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0);
-                        Vector3d norm = Vector3d.ZAxis;
+                        Vector3d up  = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
 
-                        // 确定当前属性在世界坐标系中的核心基准位置
                         Point3d textAnchor = (att.Justify == AttachmentPoint.BaseLeft)
                             ? att.Position
                             : (att.AlignmentPoint != Point3d.Origin ? att.AlignmentPoint : att.Position);
 
-                        // 计算文字几何走向向量与包围盒跨度
-                        Vector3d up = new Vector3d(-Math.Sin(rot), Math.Cos(rot), 0);
-                        double charWidth = h * wf;
-                        double totalLen = 0;
-                        foreach (char c in textStr)
-                        {
-                            totalLen += (c <= 127) ? charWidth * 0.65 : charWidth * 1.0;
-                        }
+                        Point3d baseLeft = ResolveBaseLeft(textAnchor, att.Justify, textStr, h, wf, dir, up);
 
-                        // 关键核心：准确获取/解算文字的绝对 BaseLeft 锚点
-                        // 1. 若属性本身在数据库中已有效存储了 Position（非 BaseLeft 属性的 Position 即为 AutoCAD 维护的 BaseLeft），直接优先使用
-                        Point3d baseLeft = att.Position;
-                        if (att.Justify == AttachmentPoint.BaseLeft)
-                        {
-                            baseLeft = att.Position;
-                        }
-                        else if (!att.Position.IsEqualTo(Point3d.Origin) && !att.Position.IsEqualTo(textAnchor))
-                        {
-                            baseLeft = att.Position;
-                        }
-                        else
-                        {
-                            // 2. 兜底几何反解：完整覆盖所有 14 种 AttachmentPoint 对齐方式（含 MiddleLeft、TopLeft、BottomLeft 等）
-                            double uOffset = 0;
-                            double vOffset = 0;
-
-                            switch (att.Justify)
-                            {
-                                case AttachmentPoint.BaseLeft:
-                                    uOffset = 0; vOffset = 0; break;
-                                case AttachmentPoint.BaseCenter:
-                                    uOffset = totalLen * 0.5; vOffset = 0; break;
-                                case AttachmentPoint.BaseRight:
-                                    uOffset = totalLen; vOffset = 0; break;
-
-                                case AttachmentPoint.BottomLeft:
-                                    uOffset = 0; vOffset = -h * 0.15; break;
-                                case AttachmentPoint.BottomCenter:
-                                    uOffset = totalLen * 0.5; vOffset = -h * 0.15; break;
-                                case AttachmentPoint.BottomRight:
-                                    uOffset = totalLen; vOffset = -h * 0.15; break;
-
-                                case AttachmentPoint.MiddleLeft:
-                                    uOffset = 0; vOffset = h * 0.4; break;
-                                case AttachmentPoint.MiddleCenter:
-                                case AttachmentPoint.MiddleMid:
-                                    uOffset = totalLen * 0.5; vOffset = h * 0.4; break;
-                                case AttachmentPoint.MiddleRight:
-                                    uOffset = totalLen; vOffset = h * 0.4; break;
-
-                                case AttachmentPoint.TopLeft:
-                                    uOffset = 0; vOffset = h * 0.85; break;
-                                case AttachmentPoint.TopCenter:
-                                    uOffset = totalLen * 0.5; vOffset = h * 0.85; break;
-                                case AttachmentPoint.TopRight:
-                                    uOffset = totalLen; vOffset = h * 0.85; break;
-
-                                default:
-                                    uOffset = totalLen * 0.5; vOffset = h * 0.4; break;
-                            }
-
-                            baseLeft = textAnchor - dir * uOffset - up * vOffset;
-                        }
-
-                        _previewItems.Add(new PreviewItem
-                        {
-                            Text = textStr,
-                            BasePos = baseLeft,
-                            Direction = dir,
-                            Normal = norm,
-                            Height = h,
-                            WidthFactor = wf,
-                            Entity = null
+                        _previewItems.Add(new PreviewItem {
+                            Text = textStr, BasePos = baseLeft,
+                            Direction = dir, Normal = Vector3d.ZAxis,
+                            Height = h, WidthFactor = wf, Entity = null
                         });
                     }
                     catch { }
                 }
             }
 
-            // 保护兜底：若未能从 attRefs 提取，使用 fallbackText（来自门窗当前文字内容）
             if (_previewItems.Count == 0)
             {
                 string fb = !string.IsNullOrEmpty(fallbackText) ? fallbackText : "门窗";
                 double fbh = fallbackHeight > 0.001 ? fallbackHeight : 200.0;
-                _previewItems.Add(new PreviewItem
-                {
-                    Text = fb,
-                    BasePos = basePoint,
-                    Direction = Vector3d.XAxis,
-                    Normal = Vector3d.ZAxis,
-                    Height = fbh,
-                    WidthFactor = 0.7,
-                    Entity = null
+                _previewItems.Add(new PreviewItem {
+                    Text = fb, BasePos = basePoint,
+                    Direction = Vector3d.XAxis, Normal = Vector3d.ZAxis,
+                    Height = fbh, WidthFactor = 0.7, Entity = null
                 });
             }
         }

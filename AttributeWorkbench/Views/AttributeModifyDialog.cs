@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -854,7 +854,9 @@ namespace AttributeWorkbench.Views
                     else if (selRes.Status == PromptStatus.Error) return;
                 }
 
-                List<AttributeReference> previewClones = new List<AttributeReference>();
+                // 在事务内提取纯值数据，完全不 Clone DBObject，彻底避免事务外访问悬空对象崩溃
+                List<XY_Deepening_Toolbox.Commands.AttributeTextMoveJig.JigPreviewData> jigData =
+                    new List<XY_Deepening_Toolbox.Commands.AttributeTextMoveJig.JigPreviewData>();
                 Point3d actualBasePoint = _target.PickedPoint;
                 using (_doc.LockDocument())
                 {
@@ -874,18 +876,38 @@ namespace AttributeWorkbench.Views
                             {
                                 AttributeReference att = tr.GetObject(part.AttributeId, OpenMode.ForRead) as AttributeReference;
                                 if (att != null && !string.IsNullOrEmpty(att.TextString))
-                                    previewClones.Add((AttributeReference)att.Clone());
+                                {
+                                    Point3d anchor = (att.Justify == AttachmentPoint.BaseLeft)
+                                        ? att.Position
+                                        : (att.AlignmentPoint != Point3d.Origin ? att.AlignmentPoint : att.Position);
+                                    jigData.Add(new XY_Deepening_Toolbox.Commands.AttributeTextMoveJig.JigPreviewData {
+                                        Text = att.TextString, AnchorPos = anchor, Justify = att.Justify,
+                                        Rotation = att.Rotation, Height = att.Height, WidthFactor = att.WidthFactor
+                                    });
+                                }
                             }
                         }
                         else
                         {
-                            if (primaryAtt != null) previewClones.Add((AttributeReference)primaryAtt.Clone());
+                            if (primaryAtt != null)
+                            {
+                                Point3d anchor = (primaryAtt.Justify == AttachmentPoint.BaseLeft)
+                                    ? primaryAtt.Position
+                                    : (primaryAtt.AlignmentPoint != Point3d.Origin ? primaryAtt.AlignmentPoint : primaryAtt.Position);
+                                jigData.Add(new XY_Deepening_Toolbox.Commands.AttributeTextMoveJig.JigPreviewData {
+                                    Text = string.IsNullOrEmpty(primaryAtt.TextString) ? _target.TextString : primaryAtt.TextString,
+                                    AnchorPos = anchor, Justify = primaryAtt.Justify,
+                                    Rotation = primaryAtt.Rotation,
+                                    Height = primaryAtt.Height > 0.001 ? primaryAtt.Height : _target.CurrentHeight,
+                                    WidthFactor = primaryAtt.WidthFactor > 0.01 ? primaryAtt.WidthFactor : 0.7
+                                });
+                            }
                         }
                         tr.Commit();
                     }
 
                     XY_Deepening_Toolbox.Commands.AttributeTextMoveJig jig =
-                        new XY_Deepening_Toolbox.Commands.AttributeTextMoveJig(actualBasePoint, previewClones, db, _target.TextString, _target.CurrentHeight);
+                        new XY_Deepening_Toolbox.Commands.AttributeTextMoveJig(actualBasePoint, jigData);
                     PromptResult dragRes = ed.Drag(jig);
 
                     if (dragRes.Status == PromptStatus.OK)
